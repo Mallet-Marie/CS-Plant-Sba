@@ -2910,6 +2910,8 @@ void menu()//give user a list of choices
 {
 	system("cls");
 	int choice;
+	float choicef, choicef2;
+	
     do
     {
     	printf("\n\n\n\t|===========================================================|\n");
@@ -2925,19 +2927,24 @@ void menu()//give user a list of choices
         printf("\n\t\tWhat would you like to do?\n");
         printf("\n\t\tYou chose: ");
         
-       	while (scanf("%d",&choice)!=1)
+       	while (scanf("%f",&choicef)!=1)
        	{	
        		printf("\n\t\tInput must be an integer\n");
 			printf("\n\t\tWhat would you like to do?\n");
        		printf("\n\t\tYou chose: ");
-       		scanf("%d",&choice);
+       		scanf("%f",&choicef);
        		while ((getchar()) != '\n');
 		}
+		
+		choice = choicef;
+		choicef2 = choicef-choice;
+		choice -= choicef2;
 		
         switch(choice)
         {
         	case 0:
         	printf("\n\t\tExiting...");
+        	printf("%d", choice);
         	exit(1);
         	break;
         	
