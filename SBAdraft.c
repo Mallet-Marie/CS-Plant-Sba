@@ -1,37 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
+#include <stdbool.h>
+#include <sys/stat.h>
 #define PASSWORD "guess"
 #define SIZE 50
 #define MARKUP 1.5
+#define LIMIT 3
+#define MAX_LENGTH 5
 
-struct PlantInfo
-{
-	int plantid;
-	char plantname[SIZE];
-	float plantcost;
-	float plantprice;
-	int plantstock;
-	float plantstockvalue;
-	int ogplantstock;
-	float ogplantstockvalue;
+struct ItemInfo {
+	int id;
+	char name[SIZE];
+	float cost;
+	float price;
+	int stock;
+	float stockvalue;
+	int ogstock;
+	float ogstockvalue;
 };
 
-struct EquipInfo
-{
-	int equipid;
-	char equipname[SIZE];
-	float equipcost;
-	float equipprice;
-	int equipstock;
-	float equipstockvalue;
-	int ogequipstock;
-	float ogequipstockvalue;
-};
-
-struct SaleInfo
-{
+struct SaleInfo {
 	int saleid;
 	char customername[SIZE];
 	float cost;
@@ -47,2722 +36,999 @@ struct SaleInfo
 	int totequip;
 	float planttotal[SIZE];
 	float equiptotal[SIZE];
+	float planttotfee;
+	float equiptotfee;
 };
 
-int autoidplant()//function automatically generates a number to be used as the plant id and increments when a new record is added
-{
+struct QueueInfo {
+	int id;
+	int quant;
+	float owed;
+	char name[SIZE];
+	char itemname[SIZE];
+};
+void menu();
+int autoid(char filename[], int start) {
+	int num;
+	FILE *fp;
+	if ((fp = fopen(filename, "r")) == NULL) {
+		if ((fp = fopen(filename, "w")) == NULL) {
+			printf("\n\t\tError. Cannot open id file.");
+		}
+
+		else {	
+			fprintf(fp, "%d", start);
+			fclose(fp);
+			return 1;
+		}
+	}
+	fscanf(fp, "%d", &num);
+	num++;
+	fclose(fp);
+	
+    if ((fp = fopen(filename, "w")) == NULL) {
+		printf("\n\t\tError. Cannot open id file.");
+	}
+
+	else {
+		fprintf(fp, "%d", num);
+		fclose(fp);
+		return num;
+	}
+}
+
+int read_id() {//function automatically generates a number to be used as the order id and increments when a new record is added 
     int i;
     FILE * fp;
-	if ((fp = fopen("autoidplant.txt", "r")) == NULL)
-	{
-        if ((fp = fopen("autoidplant.txt", "w")) == NULL)
-        {
-        	printf("Error. Cannot open id file.");
-		}
-        fprintf(fp, "%d", 1);
-        fclose(fp);
-        return 1;
+	if ((fp = fopen("data\\queueid.txt", "r")) == NULL) {
+        printf("Error. Cannot open id file.");
     }//end if
     
-    fscanf(fp, "%d", &i);
-    i++;
-
-    fclose(fp); 
-    fp = fopen("autoidplant.txt", "w"); 
-    fprintf(fp, "%d", i);
-    fclose(fp);
+	else {
+		fscanf(fp, "%d", &i) ;
+		fclose(fp) ;
+	}
     return i;
 }//end of funtion
 
-int autoidequip()//function automatically generates a number to be used as the equipment id and increments when a new record is added
-{
-    int i ;
+int decrement_id() {//function automatically generates a number to be used as the order id and increments when a new record is added
+    int i;
     FILE * fp;
-	if ((fp = fopen("autoidequip.txt", "r")) == NULL)
-	{
-        if ((fp = fopen("autoidequip.txt", "w")) == NULL)
-        {
-        	printf("Error. Cannot open id file.");
-		}
-        fprintf(fp, "%d", 1) ;
-        fclose(fp) ;
-        return 1;
+	if ((fp = fopen("data\\queueid.txt", "w")) == NULL) {
+        printf("Error. Cannot open id file.");
     }//end if
     
-    fscanf(fp, "%d", &i) ;
-    i++;
-
-    fclose(fp); 
-    fp = fopen("autoidequip.txt", "w") ; 
-    fprintf(fp, "%d", i) ;
-    fclose(fp) ;
-    return i ;
+	else {
+		fscanf(fp, "%d", &i);
+		i-=1;
+		fprintf(fp, "%d", i);
+		fclose(fp) ;
+	}
+    return i;
 }//end of funtion
 
-int autoidsale()//function automatically generates a number to be used as the order id and increments when a new record is added
-{
-    int i ;
-    FILE * fp;
-	if ((fp = fopen("autoidsale.txt", "r")) == NULL)
-	{
-        if ((fp = fopen("autoidsale.txt", "w")) == NULL)
-        {
-        	printf("Error. Cannot open id file.");
+int size() {
+	return read_id()+1;
+}
+
+bool is_empty() {
+	if (read_id()==-1) {
+		printf("\n\t\tQueue is empty\n");
+		return true;
+	}
+	else
+		return false;
+}
+
+float checknum(int type) {
+    float num;
+    while(scanf("%f", &num)!=1) {
+        printf("\n\t\tInput must be a number\n");
+        printf("\n\t\tPlease re-enter.\n\t\t");
+        while ((getchar()) != '\n');
+    }
+	if (type == 0)
+    	return num;
+	else if (type == 1)
+		return (int)num;
+}
+
+void PrintLabel(char label[], bool is_start) {
+	if(!is_start)
+		printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+	printf("\n\t|===============================================================|\n");
+	printf("\t%s\n", label);
+	printf("\t|===============================================================|\n\n");
+}
+
+int InvalidOption(int num) {
+	printf("\n\t\tInvalid option.");
+	printf("\n\t\tYou chose: ");
+	return num = checknum(1);
+}
+
+void MenuPause() {
+	while ((getchar()) != '\n');
+	while ((getchar()) != '\n');
+	menu();
+	printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+}
+
+void CreateRecordFile(char filename[], int queue) {//function to create a file to store plant records
+	FILE *fp;//file pointer
+	if	((fp = fopen(filename, "rb")) == NULL) {
+		if	((fp = fopen(filename, "wb")) == NULL) 
+			printf("\n\t\tCannot open the file \n");
+		
+		else {
+			printf("\n\n\t\tRecords File created.");
+            if(queue==1)
+                autoid("data\\queueid.txt", -1);
 		}
-        fprintf(fp, "%d", 1) ;
-        fclose(fp) ;
-        return 1;
-    }//end if
-    
-    fscanf(fp, "%d", &i) ;
-    i++;
-
-    fclose(fp); 
-    fp = fopen("autoidsale.txt", "w") ; 
-    fprintf(fp, "%d", i) ;
-    fclose(fp) ;
-    return i ;
-}//end of funtion
-
-void CreatePlantFile()//function to create a file to store plant records
-{
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "wb")) == NULL)
-	{
-		printf("\n\t\tCannot open the file \n");
 	}//end if
 	
 	else
-	{
-		printf("\n\n\t\tPlant Record File created.");
-	}
-	
-	fclose(fptrplant);
+		printf("\n\n\t\tFile already exists.");
+	fclose(fp);
 }//end of funtion
 
-void CreateEquipmentFile()//function to create a file to store equipment records
-{	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "wb")) == NULL)
-	{
-		printf("\n\t\tCannot open the file \n");
-	}//end if
+void ViewQueue() {//View plant records
+	struct QueueInfo queue[MAX_LENGTH] = {0, 0, 0.0, "", ""};
+	struct QueueInfo element = {0, 0, 0.0, "", ""};
+	int i;
+	FILE *fp;//file pointer
+	if	((fp = fopen("data\\queuedata.bin", "rb+")) == NULL)
+		printf("\n\t\tCannot open file \n");
 	
-	else
-	{
-		printf("\n\n\t\tEquipment Record File created.");
-	}
-	
-	fclose(fptrequip);
+	else {
+        is_empty(); 
+		for (i=0; i<=read_id(); i++) {
+			fread(&element, sizeof(struct QueueInfo), 1, fp);
+			queue[i] = element;
+			printf("\n\t\tId is: %d\n", queue[i].id);
+			printf("\n\t\tCustomer Name is: %s\n", queue[i].name);
+			printf("\n\t\tItem Name is: %s\n", queue[i].itemname);
+			printf("\n\t\tAmount ordered is: %d\n", queue[i].quant);
+			printf("\n\t\tAmount owed is: $%.2f\n", queue[i].owed);
+			printf("--------------------------------------------------------------------");
+		}//end if
+	}//
+    fclose(fp);
 }//end of funtion
 
-void CreateSaleFile()//function to create a file to store sale records
-{
+void ViewItem(char filename[]) {//View plant records
+	struct ItemInfo item = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+	FILE *fp;//file pointer
+	if	((fp = fopen(filename, "rb+")) == NULL)
+		printf("\n\t\tCannot open file \n");
+
+	else {
+		while(fread(&item, sizeof(struct ItemInfo), 1, fp) == 1) {//while fread returns 1, i.e there are records still to be read in the file
+			if (item.id != 0) {
+				printf("\n\t\tItem Id is: %d\n", item.id);
+				printf("\n\t\tItem Name is: %s\n", item.name);
+				printf("\n\t\tCost Price is: $%.2f\n", item.cost);	
+				printf("\n\t\tSale Price is: $%.2f\n", item.price);
+				printf("\n\t\tAmount in stock is: %d\n", item.stock);
+				printf("\n\t\tValue of stock is: $%.2f\n", item.stockvalue);
+				printf("--------------------------------------------------------------------");
+			}
+		}//end while
+	}
+    fclose(fp);
+}//end of funtion
+
+void ViewSale() {//View sale records
+	struct SaleInfo sale = {0, "", 0.0, {0, 0, 0}, {0, 0, 0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {"", "", ""}, {"", "", ""}, {0, 0, 0}, {0, 0, 0}, 0, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, 0.0, 0.0};
+	int i, j;
 	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "wb")) == NULL)
-	{
-		printf("\n\t\tCannot open the file \n");
-	}//end if
+	if	((fptrsale = fopen("data\\saledata.bin", "rb+")) == NULL)
+		printf("\n\t\tCannot open file \n");
 	
-	else
-	{
-		printf("\n\n\t\tSale Record File created.");
-	}
-	
+	else {
+		while(fread(&sale, sizeof(struct SaleInfo), 1, fptrsale)==1) {
+			if (sale.saleid != 0) {
+				printf("\n\t\tOrder Id is: %d\n", sale.saleid);
+				printf("\n\t\tCustomer Name is: %s\n", sale.customername);
+				if (sale.totequip > 0) {
+					printf("\n\t\tEquipment Purchased:\n");
+					for(i=0;i<sale.totequip;i++) {
+						printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
+						printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
+						printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
+						printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
+						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
+					}	
+				}
+				if(sale.totplant > 0) {
+					printf("\n\t\tPlants Purchased:\n");
+					for(j=0;j<sale.totplant;j++) {
+						printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
+						printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
+						printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
+						printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
+						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
+					}	
+				}
+				printf("\n\t\tTotal is $%.2f\n", sale.cost);
+				printf("--------------------------------------------------------------------");
+			}//end if
+		}//end while
+	}//
 	fclose(fptrsale);
 }//end of funtion
 
-void ViewPlant()//View plant records
-{
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-	{
+void Enqueue() {
+	struct QueueInfo queue[MAX_LENGTH] = {0, 0, 0.0, "", ""};
+	struct QueueInfo element = {0, 0, 0.0, "", ""};	
+	struct ItemInfo item = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+	float quantf;
+    FILE *fp;
+	FILE *fptr;
+	if	((fp = fopen("data\\queuedata.bin", "rb+")) == NULL)
 		printf("\n\t\tCannot open file \n");
-	}//end if
+
+	else {
+		if	((fptr = fopen("data\\limitemdata.bin", "rb+")) == NULL)
+			printf("\n\t\tCannot open file \n");
+
+		else {
+			if (size() == MAX_LENGTH)
+				printf("\n\t\tQueue is full.");
+			
+			else {
+				fread(&item, sizeof(struct ItemInfo), 1, fptr);
+				printf("\n\t\tCustomer name is: ");
+				scanf(" %[^\n]s", &element.name);
+				printf("\n\t\tAmount requested is: ");
+				element.quant = checknum(1);
+
+				while (element.quant > LIMIT) {
+					printf("\n\t\tPlease enter a number less than %d\n", LIMIT);
+					printf("\n\t\tAmount requested is: ");
+					element.quant = checknum(1);
+				}
+				while (element.quant > item.stock) {
+					printf("\n\t\tPlease enter a number less than %d\n", item.stock);
+					printf("\n\t\tAmount requested is: ");
+					element.quant = checknum(1);		
+				}
+				element.owed = element.quant * item.price;
+				element.id = autoid("data\\queueid.txt", 0);
+				strcpy(element.itemname, item.name);
+				queue[read_id()] = element;
+				item.stock -= element.quant;
+				item.stockvalue = item.price*item.stock;
+				
+				fseek(fptr, (item.id-1) * sizeof(struct ItemInfo), SEEK_SET);//moves file pointer to the beginning of the file
+				fwrite(&item, sizeof(struct ItemInfo), 1, fptr);//write record to file
+
+				fseek(fp, (read_id()) * sizeof(struct QueueInfo), SEEK_SET);//moves file pointer to the beginning of the file
+				fwrite(&queue[read_id()], sizeof(struct QueueInfo), 1, fp);//write record to file
+			}
+		}
+	}
+	fclose(fp);
+	fclose(fptr);
+}
+
+void AddItem(char type[], char filename[], char mode[]) {//Add a new plant record
+	struct ItemInfo item = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+	float cost;
+	FILE * fp;//file pointer
+	if	((fp = fopen(filename, mode)) == NULL)
+		printf("\n\t\tCannot open file \n");
 	
-	else
-	{
-		while(fread(&plant, sizeof(struct PlantInfo), 1, fptrplant)==1)//while fread returns 1, i.e there are records still to be read in the file
-		{
-			if (plant.plantid != 0)
-			{
-				printf("\n\t\tId is: %d\n", plant.plantid);
-				printf("\n\t\tPlant Name is: %s\n", plant.plantname);
-				printf("\n\t\tCost Price/kg is: $%.2f\n", plant.plantcost);	
-				printf("\n\t\tSale Price/kg is: $%.2f\n", plant.plantprice);
-				printf("\n\t\tAmount in stock is: %d\n", plant.plantstock);
-				printf("\n\t\tValue of stock is: $%.2f\n", plant.plantstockvalue);
-				printf("--------------------------------------------------------------------");
-			}//end if
-		}//end while
-	
-	}//end else
-    fclose(fptrplant);
+	else {
+		printf("\n\t\tItem name is: ");
+		scanf(" %[^\n]s", &item.name);
+		printf("\n\t\tItem Cost Price is: ");
+		cost = checknum(0);
+		item.cost = cost;
+		item.price = item.cost*MARKUP;
+		printf("\n\t\tAmount in stock is: ");
+		item.stock = checknum(1); 
+		item.ogstock = item.stock;
+		item.stockvalue = item.price*item.stock; 
+		item.ogstockvalue = item.stockvalue;
+		if(stricmp("rb+", mode) != 0)
+			item.id = autoid(type, 1);
+		else
+			item.id = 1;
+		fseek(fp, (item.id-1) * sizeof(struct ItemInfo), SEEK_SET);//moves file pointer to the beginning of the file
+		fwrite(&item, sizeof(struct ItemInfo), 1, fp);//write record to file
+	}//
+	fclose(fp);
 }//end of funtion
 
-void ViewEquipment()//View equipment records
-{
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		while(fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip)==1)
-		{
-			if (equipment.equipid != 0)
-			{
-				printf("\n\t\tId is: %d\n", equipment.equipid);
-				printf("\n\t\tEquipment Name is: %s\n", equipment.equipname);
-				printf("\n\t\tCost Price is: $%.2f\n", equipment.equipcost);
-				printf("\n\t\tSale Price is: $%.2f\n", equipment.equipprice);
-				printf("\n\t\tAmount in stock is %d\n", equipment.equipstock);
-				printf("\n\t\tValue of stock is $%.2f\n", equipment.equipstockvalue);
-				printf("--------------------------------------------------------------------");
-			}//end if
-		}//end while
-	}//end else
+void AddToSale(int type, char name[], int update, char mode[], int id) {
+	struct SaleInfo sale = {0, "", 0.0, {0, 0, 0}, {0, 0, 0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {"", "", ""}, {"", "", ""}, {0, 0, 0}, {0, 0, 0}, 0, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, 0.0, 0.0};
+	struct ItemInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+	struct ItemInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+	FILE *fptrsale;//file pointer
+    FILE*fptrplant;
+    FILE*fptrequip;
+    int i = 0, j = 0, num = 0, num2 = 0, idp, ide, plantnum, equipnum;
+    if	(((fptrequip = fopen("data\\equipdata.bin", "rb+")) == NULL) || ((fptrplant = fopen("data\\plantdata.bin", "rb+")) == NULL) || ((fptrsale = fopen("data\\saledata.bin", mode)) == NULL))
+        printf("\n\t\tCannot open file \n");
+    
+    else {
+        strcpy(sale.customername, name); 
+        if (type == 2 || type == 3) {
+            printf("\n\t\t|======================================================|\n");
+            printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
+            printf("\t\t|======================================================|\n\n");
+            ViewItem("data\\equipdata.bin");
+            if(update == 1) {
+                sale.cost -= sale.equiptotfee;
+                sale.equiptotfee = 0;
+            }
+            do {
+                printf("\n\n\t\tEnter id of the equipment purchased.\n\t\t");
+                ide = checknum(1);
+            
+                fseek(fptrequip, (ide-1) * sizeof(struct ItemInfo), SEEK_SET);
+                fread(&equipment, sizeof(struct ItemInfo), 1, fptrequip);//reads a block of data
+                
+                while(equipment.id == 0) {
+                    printf("\n\n\t\tItem not found.");
+                    printf("\n\t\tEnter a different id.\n\t\t");
+                    ide = checknum(1);
+                    
+                    fseek(fptrequip, (ide-1) * sizeof(struct ItemInfo), SEEK_SET);
+                    fread(&equipment, sizeof(struct ItemInfo), 1, fptrequip);
+                }
+                
+                while(equipment.stock == 0) {
+                    printf("\n\n\t\tItem out of stock.");
+                    printf("\n\t\tEnter a different id.\n\t\t");
+                    ide = checknum(1);
+                    
+                    fseek(fptrequip, (ide-1) * sizeof(struct ItemInfo), SEEK_SET);
+                    fread(&equipment, sizeof(struct ItemInfo), 1, fptrequip);//reads a block of data
+                }
+                
+                printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
+                equipnum = checknum(1);
+                
+                while (equipnum>equipment.stock) {
+                    printf("\n\t\tNot enough in stock. Please enter a value less than %d", equipment.stock);
+                    printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
+                    equipnum = checknum(1);
+                }
+                
+                sale.equipquant[i] = equipnum;
+                sale.equipids[i] = ide;
+                strcpy(sale.equipnames[i], equipment.name);
+                sale.equipprice[i] = equipment.price;
+                sale.equiptotal[i] = sale.equipprice[i]*sale.equipquant[i];
+                sale.equiptotfee += sale.equiptotal[i];
+                sale.cost += sale.equiptotal[i];
+                
+                if(update==1) {
+                    equipment.stock=equipment.ogstock;
+                    equipment.stockvalue=equipment.ogstockvalue;								
+                }
+                equipment.stock -= sale.equipquant[i];
+                equipment.stockvalue -= sale.equiptotal[i];
+                
+                fseek(fptrequip, (equipment.id-1) * sizeof(struct ItemInfo),SEEK_SET);//moves file pointer to the beginning of the file
+                fwrite(&equipment, sizeof(struct ItemInfo), 1, fptrequip);//write record to file
+                
+                i++;
+                sale.totequip++;
+                printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
+                num = checknum(1);
+
+                if (num == -1)
+                    break;
+            }
+            while (num == 0);
+        } 
+
+        if (type == 1 || type == 3) {
+            printf("\n\t\t|==================================================|\n");
+            printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
+            printf("\t\t|==================================================|\n\n");
+            ViewItem("data\\plantdata.bin");
+            if(update==1) {
+                sale.cost -= sale.planttotfee;
+                sale.planttotfee = 0;                
+            }
+            do {
+                printf("\n\n\t\tEnter id of the plant purchased.\n\t\t");
+                idp = checknum(1);
+                
+                fseek(fptrplant, (idp-1) * sizeof(struct ItemInfo), SEEK_SET);
+                fread(&plant, sizeof(struct ItemInfo), 1, fptrplant);//reads a block of data
+                
+                while(plant.id == 0) {
+                    printf("\n\n\t\tItem not found.");
+                    printf("\n\t\tEnter a different plant id.\n\t\t");
+                    idp = checknum(1);
+                        
+                    fseek(fptrplant, (idp-1) * sizeof(struct ItemInfo), SEEK_SET);
+                    fread(&plant, sizeof(struct ItemInfo), 1, fptrplant);
+                }
+                
+                while(plant.stock == 0) {
+                    printf("\n\n\t\tItem out of stock.");
+                    printf("\n\t\tEnter a different plant id.\n\t\t");
+                    idp = checknum(1);
+                
+                    fseek(fptrplant, (idp-1) * sizeof(struct ItemInfo), SEEK_SET);
+                    fread(&plant, sizeof(struct ItemInfo), 1, fptrplant);
+                }
+                
+                printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
+                plantnum = checknum(1);
+                
+                if (plantnum>plant.stock) {
+                    printf("\n\t\tNot enough in stock. Please enter a value less than %d", plant.stock);
+                    printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
+                    plantnum = checknum(1);
+                }
+                
+                sale.plantquant[j] = plantnum;
+                sale.plantids[j] = idp;
+                strcpy(sale.plantnames[j], plant.name);
+                sale.plantprice[j] = plant.price;
+                sale.planttotal[j] = sale.plantprice[j]*sale.plantquant[j];
+                sale.planttotfee = sale.planttotal[j];
+                sale.cost += sale.planttotal[j];
+                
+                if(update==1) {
+                    plant.stock = plant.ogstock;
+                    plant.stockvalue = plant.ogstockvalue;                    
+                }
+                plant.stock -= sale.plantquant[j];
+                plant.stockvalue -= sale.planttotal[j];
+                
+                fseek(fptrplant, (plant.id-1)*sizeof(struct ItemInfo),SEEK_SET);//moves file pointer to the beginning of the file
+                fwrite(&plant, sizeof(struct ItemInfo), 1, fptrplant);//write record to the file
+                
+                j++;
+                sale.totplant++;
+                printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
+                num2 = checknum(1);
+                
+                if (num2 == -1)
+                    break;
+            }
+            while (num2 == 0);
+        }
+    }//
+    if(update!=1)
+        sale.saleid = autoid("data\\saleid.txt", 1);
+    else
+        sale.saleid = id;
+    fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
+    fwrite(&sale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file
+    fclose(fptrsale);
     fclose(fptrequip);
-}//end of funtion
-
-void ViewSale()//View sale records
-{
-	struct SaleInfo sale;
-	int i, j;
-	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		while(fread(&sale, sizeof(struct SaleInfo), 1, fptrsale)==1)
-		{
-			if (sale.saleid != 0)
-			{
-				printf("\n\t\tOrder Id is: %d\n", sale.saleid);
-				printf("\n\t\tCustomer Name is: %s\n", sale.customername);
-				if (sale.totequip > 0)
-				{
-					printf("\n\t\tEquipment Purchased:\n");
-					for(i=0;i<sale.totequip;i++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
-						printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
-						printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
-					}	
-				}
-				
-				if(sale.totplant > 0)
-				{
-					printf("\n\t\tPlants Purchased:\n");
-					for(j=0;j<sale.totplant;j++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
-						printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
-						printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
-					}	
-				}
-				printf("\n\t\tTotal is $%.2f\n", sale.cost);
-				
-				printf("--------------------------------------------------------------------");
-			}//end if
-		}//end while
-	}//end else
-	fclose(fptrsale);
-}//end of funtion
-
-void AddPlant()//Add a new plant record
-{
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	
-	FILE * fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "ab+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		plant.plantid = autoidplant();
-	
-		printf("\n\t\tPlant name is: ");
-		scanf(" %[^\n]s", &plant.plantname);
-		
-		printf("\n\t\tPlant Cost Price/kg is: ");
-		scanf("%f", &plant.plantcost);
-		
-		plant.plantprice = plant.plantcost*MARKUP;
-		
-		printf("\n\t\tAmount in stock is: ");
-		scanf("%d", &plant.plantstock);
-		
-		plant.ogplantstock = plant.plantstock;
-			
-		plant.plantstockvalue = plant.plantprice*plant.plantstock; 
-		
-		plant.ogplantstockvalue = plant.plantstockvalue;
-		
-		fseek(fptrplant, (plant.plantid-1) * sizeof(struct PlantInfo), SEEK_SET);//moves file pointer to the beginning of the file
-		fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to file
-	}//end else
-	fclose(fptrplant);
-}//end of funtion
-
-void AddEquip()//Add a new equipment record
-{
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "ab+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		equipment.equipid = autoidequip();
-		
-		printf("\n\t\tEquipment name is: ");
-		scanf(" %[^\n]s", &equipment.equipname);
-		
-		printf("\n\t\tEquipment cost price is: ");
-		scanf("%f", &equipment.equipcost);
-	
-		equipment.equipprice = equipment.equipcost*MARKUP;
-		
-		printf("\n\t\tAmount in stock is: ");
-		scanf("%d", &equipment.equipstock);
-		
-		equipment.ogequipstock = equipment.equipstock;
-		
-		equipment.equipstockvalue = equipment.equipprice*equipment.equipstock;
-		
-		equipment.ogequipstockvalue = equipment.equipstockvalue;
-		
-		fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-		fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to file
-	}//end else
-	fclose(fptrequip);
-}//end of funtion
-
-void AddSale()//Add a new sale record
-{	
-	struct SaleInfo sale;
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	int i = 0, j = 0, num = 0, num2 = 0, choice, idp, ide, plantnum, equipnum;
-	float cost = 0;
-	
-	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "ab+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		sale.saleid = autoidsale();
-		
-		printf("\n\t\tCustomer name is: ");
-		scanf(" %[^\n]s", &sale.customername);
-		
-		printf("\n\t\tWhat items did the customer purchase?");
-		printf("\n\t\t1. Plants.\n\t\t2. Equipment.\n\t\t3. Plants and Equipment.\n\t\t");
-		scanf("%d", &choice);
-		
-		sale.totplant = 0;
-		sale.totequip = 0;
-		if (choice == 1)
-		{
-			printf("\n\t\t|==================================================|\n");
-        	printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-      	  	printf("\t\t|==================================================|\n\n");
-			ViewPlant();
-			FILE*fptrplant;
-			if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-			{
-				printf("\n\t\tCannot open file \n");
-			}//end if
-			
-			else
-			{
-				do
-				{
-					printf("\n\n\t\tEnter id of the plant purchased.\n\t\t");
-					scanf("%d",&idp);
-				
-					fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-					fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					
-					while(plant.plantstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different plant id.\n\t\t");
-						scanf("%d",&idp);
-						fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-						fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &plantnum);
-					
-					if (plantnum>plant.plantstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", plant.plantstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &plantnum);
-					}
-					
-					sale.plantquant[j] = plantnum;
-					
-					sale.plantids[j] = idp;
-					
-					strcpy(sale.plantnames[j], plant.plantname);
-					
-					sale.plantprice[j] = plant.plantprice;
-					sale.planttotal[j] = sale.plantprice[j]*sale.plantquant[j];
-					sale.cost += sale.planttotal[j];
-					
-					plant.plantstock -= sale.plantquant[j];
-					plant.plantstockvalue -= sale.planttotal[j];
-					fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-					
-					j++;
-					sale.totplant++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-			
-			}//end else
-				
-			fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
-			fwrite(&sale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file
-			fclose(fptrsale);
-			fclose(fptrplant);	
-		}//end if
-		
-		if (choice == 2)
-		{
-			printf("\n\t\t|======================================================|\n");
-        	printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-      	  	printf("\t\t|======================================================|\n\n");
-			ViewEquipment();
-			FILE*fptrequip;
-			if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-			{
-				printf("\n\t\tCannot open file \n");
-			}//end if
-			
-			else
-			{
-				do
-				{
-					printf("\n\n\t\tEnter id of the equipment purchased.\n\t\t");
-					scanf("%d",&ide);
-				
-					fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-					fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					
-						while(equipment.equipstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different id.\n\t\t");
-						scanf("%d",&ide);
-						fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-						fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &equipnum);
-					
-					if (equipnum>equipment.equipstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", equipment.equipstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &equipnum);
-					}
-					
-					sale.equipquant[i] = equipnum;
-					
-					sale.equipids[i] = ide;
-					
-					strcpy(sale.equipnames[i], equipment.equipname);
-					
-					sale.equipprice[i] = equipment.equipprice;
-					sale.equiptotal[i] = sale.equipprice[i]*sale.equipquant[i];
-					sale.cost += sale.equiptotal[i];
-					
-					equipment.equipstock -= sale.equipquant[i];
-					equipment.equipstockvalue -= sale.equiptotal[i];
-					fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to file
-					
-					i++;
-					sale.totequip++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-			}//end else
-			fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
-			fwrite(&sale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file
-			fclose(fptrsale);
-			fclose(fptrequip);
-		}//end if
-		
-		if (choice == 3)
-		{
-			printf("\n\t\t|==================================================|\n");
-        	printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-      	  	printf("\t\t|==================================================|\n\n");
-			ViewPlant();
-			printf("\n\t\t|======================================================|\n");
-        	printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-      	  	printf("\t\t|======================================================|\n\n");
-			ViewEquipment();
-			FILE*fptrequip;
-			FILE*fptrplant;
-			if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) && (fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-			{
-				printf("\n\t\tCannot open file \n");
-			}//end if
-			
-			else
-			{
-				do
-				{
-					printf("\n\n\t\tEnter id of the equipment purchased.\n\t\t");
-					scanf("%d",&ide);
-				
-					fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-					fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					
-					while(equipment.equipstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different id.\n\t\t");
-						scanf("%d",&ide);
-						fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-						fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &equipnum);
-					
-					if (equipnum>equipment.equipstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", equipment.equipstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &equipnum);
-					}
-					
-					sale.equipquant[i] = equipnum;
-					
-					sale.equipids[i] = ide;
-					
-					strcpy(sale.equipnames[i], equipment.equipname);
-					
-					sale.equipprice[i] = equipment.equipprice;
-					sale.equiptotal[i] = sale.equipprice[i]*sale.equipquant[i];
-					sale.cost += sale.equiptotal[i];
-					
-					equipment.equipstock -= sale.equipquant[i];
-					equipment.equipstockvalue -= sale.equiptotal[i];
-					fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to file
-					
-					i++;
-					sale.totequip++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-					
-				do
-				{
-					printf("\n\n\t\tEnter id of the plant purchased.\n\t\t");
-					scanf("%d",&idp);
-				
-					fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-					fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					
-					while(plant.plantstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different plant id.\n\t\t");
-						scanf("%d",&idp);
-						fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-						fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &plantnum);
-					
-					if (plantnum>plant.plantstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", plant.plantstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &plantnum);
-					}
-					
-					sale.plantquant[j] = plantnum;
-					
-					sale.plantids[j] = idp;
-					
-					strcpy(sale.plantnames[j], plant.plantname);
-					
-					sale.plantprice[j] = plant.plantprice;
-					sale.planttotal[j] = sale.plantprice[j]*sale.plantquant[j];
-					sale.cost += sale.planttotal[j];
-					
-					plant.plantstock -= sale.plantquant[j];
-					plant.plantstockvalue -= sale.planttotal[j];
-					fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-					
-					j++;
-					sale.totplant++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num2 == -1)
-					{
-						break;
-					}
-				}
-				while (num2 == 0);
-			}//end else
-			fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
-			fwrite(&sale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file
-			fclose(fptrsale);
-			fclose(fptrequip);
-			fclose(fptrplant);
-		}//end if
-	}//end else
-}//end of funtion
-
-void SearchPlantName()
-{
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	char name[SIZE]; 
-	int found=0; 
-	
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter name of the record that you want to find.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-		
-		while(fread(&plant, sizeof(struct PlantInfo), 1, fptrplant)==1)
-		{   
-			if(stricmp(name, plant.plantname)==0)
-			{                              
-				found=1;
-				
-				printf("\n\t\tId is: %d\n", plant.plantid);
-				printf("\n\t\tPlant Name is: %s\n", plant.plantname);
-				printf("\n\t\tCost Price/kg is: $%.2f\n", plant.plantcost);	
-				printf("\n\t\tSale Price/kg is: $%.2f\n", plant.plantprice);
-				printf("\n\t\tAmount in stock is: %d\n", plant.plantstock);
-				printf("\n\t\tValue of stock is: $%.2f\n", plant.plantstockvalue);
-				break;
-			}//end if 
-		}//end while
-		
-		if (found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}				
-	}//end else
-	fclose(fptrplant);
+    fclose(fptrplant);
 }
 
-void SearchPlantId()
-{
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0}; 
-	int id, found=0; 
-	
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter id of the record to find.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrplant, (id-1) * sizeof(struct PlantInfo), SEEK_SET);
-		fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-		
-		if(plant.plantid != 0)
-		{
-			found=1;
-			
-			printf("\n\t\tId is: %d\n", plant.plantid);
-			printf("\n\t\tPlant Name is: %s\n", plant.plantname);
-			printf("\n\t\tCost Price/kg is: $%.2f\n", plant.plantcost);	
-			printf("\n\t\tSale Price/kg is: $%.2f\n", plant.plantprice);
-			printf("\n\t\tAmount in stock is: %d\n", plant.plantstock);
-			printf("\n\t\tValue of stock is: $%.2f\n", plant.plantstockvalue);
-			
-		}//end if
-		
-		if (found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}
-	}//end else
-	fclose(fptrplant);
-}
-
-void SearchPlant()//Search for a plant record
-{
-	int choice;
-	
-	printf("\n\t\t1. Search by name.");
-	printf("\n\t\t2. Search by ID.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		SearchPlantName();
-		break;
-
-		case 2:
-		SearchPlantId();
-		break;
-			
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}//end switch
-}//end of funtion
-
-void SearchEquipmentName()
-{
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+void AddSale() {//Add a new sale record
+	int choice, truth = 0;
 	char name[SIZE];
-	int found=0;
-	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter name of the record that you want to find.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-	
-		while(fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip)==1)
-		{   
-			if(stricmp(name, equipment.equipname)==0)
-			{                              
-				found=1;
-				
-				printf("\n\t\tId is: %d\n", equipment.equipid);
-				printf("\n\t\tEquipment Name is: %s\n", equipment.equipname);
-				printf("\n\t\tCost Price is: $%.2f\n", equipment.equipcost);
-				printf("\n\t\tSale Price is: $%.2f\n", equipment.equipprice);
-				printf("\n\t\tAmount in stock is %d\n", equipment.equipstock);
-				printf("\n\t\tValue of stock is $%.2f\n", equipment.equipstockvalue);
-		
-			}//end if
-		}//end while
-		if (found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}
-	}//end else
-	fclose(fptrequip);
-}
 
-void SearchEquipmentId()
-{
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	int id, found=0;
+	printf("\n\t\tCustomer name is: ");
+	scanf(" %[^\n]s", &name);
 	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
+	printf("\n\t\tWhat items did the customer purchase?");
+	printf("\n\t\t1. Plants.\n\t\t2. Equipment.\n\t\t3. Plants and Equipment.\n\t\t");
+	choice = checknum(1);
 	
-	else
-	{
-		printf("\n\t\tEnter id of the record to find.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrequip, (id-1) * sizeof(struct EquipInfo), SEEK_SET);
-		fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-		
-		if(equipment.equipid != 0)
-		{
-			found=1;
-			
-			printf("\n\t\tId is: %d\n", equipment.equipid);
-			printf("\n\t\tEquipment Name is: %s\n", equipment.equipname);
-			printf("\n\t\tCost Price is: $%.2f\n", equipment.equipcost);
-			printf("\n\t\tSale Price is: $%.2f\n", equipment.equipprice);
-			printf("\n\t\tAmount in stock is %d\n", equipment.equipstock);
-			printf("\n\t\tValue of stock is $%.2f\n", equipment.equipstockvalue);
-			
-		}
-		if (found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}
-	}//end else
-	fclose(fptrequip);
-}
-
-void SearchEquipment()//Search for an equipment record
-{
-	int choice;
-	
-	printf("\n\t\t1. Search by name.");
-	printf("\n\t\t2. Search by ID.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		SearchEquipmentName();
-		break;
-		
-		case 2:
-		SearchEquipmentId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;	
-	}
-}//end of function
-
-void SearchSaleName()
-{
-	int i, j;
-	struct SaleInfo sale;
-	char name[SIZE]; 
-	int found=0; 
-	
-	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter customer name of the record that you want to find.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-		
-		while(fread(&sale, sizeof(struct SaleInfo), 1, fptrsale)==1)
-		{   
-			if(stricmp(name, sale.customername)==0)
-			{                              
-				found=1;
-				
-				printf("\n\t\tOrder Id is: %d\n", sale.saleid);
-				printf("\n\t\tCustomer Name is: %s\n", sale.customername);
-				if (sale.totequip > 0)
-				{
-					printf("\n\t\tEquipment Purchased:\n");
-					for(i=0;i<sale.totequip;i++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
-						printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
-						printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
-					}	
-				}
-				
-				if(sale.totplant > 0)
-				{
-					printf("\n\t\tPlants Purchased:\n");
-					for(j=0;j<sale.totplant;j++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
-						printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
-						printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
-					}	
-				}
-				printf("\n\t\tTotal is $%.2f\n", sale.cost);	
-			}//end if    
-		}//end while
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}// end else
-	fclose(fptrsale);
-}
-
-void SearchSaleId()
-{
-	int id, i, j;
-	struct SaleInfo sale;
-	int found=0; 
-	
-	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter id of the record to find.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrsale, (id-1) * sizeof(struct SaleInfo), SEEK_SET);
-		fread(&sale, sizeof(struct SaleInfo), 1, fptrsale);//reads a block of data
-	
-		if(sale.saleid != 0)
-		{
-			found=1;
-			
-			printf("\n\t\tOrder Id is: %d\n", sale.saleid);
-			printf("\n\t\tCustomer Name is: %s\n", sale.customername);
-			if (sale.totequip > 0)
-			{
-				printf("\n\t\tEquipment Purchased:\n");
-				for(i=0;i<sale.totequip;i++)
-				{
-					printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
-					printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
-					printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
-					printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
-					printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
-				}	
-			}
-			
-			if(sale.totplant > 0)
-			{
-				printf("\n\t\tPlants Purchased:\n");
-				for(j=0;j<sale.totplant;j++)
-				{
-					printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
-					printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
-					printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
-					printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
-					printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
-				}	
-			}
-			printf("\n\t\tTotal is $%.2f\n", sale.cost);	
-		}//end if
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}//end else
-	fclose(fptrsale);
-}
-
-void SearchSale()//Search for a sale record
-{
-	int choice;
-	
-	printf("\n\t\t1. Search by name.");
-	printf("\n\t\t2. Search by ID.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		SearchSaleName();
-		break;
-		
-		case 2:
-		SearchSaleId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
-}//end of funtion
-
-void UpdatePlantName()
-{
-	int option;
-	char name[SIZE];
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	int found=0;
-	
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-		
-	else
-	{
-		printf("\n\t\tEnter plant name of the record that you want to update.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-		
-		while(fread(&plant, sizeof(struct PlantInfo), 1, fptrplant)==1)
-		{   
-			if(stricmp(name, plant.plantname)==0)
-			{                              
-				found=1;
-				
-				printf("\n\t\tId is: %d\n", plant.plantid);
-				printf("\n\t\tPlant Name is: %s\n", plant.plantname);
-				printf("\n\t\tCost Price/kg is: $%.2f\n", plant.plantcost);	
-				printf("\n\t\tSale Price/kg is: $%.2f\n", plant.plantprice);
-				printf("\n\t\tAmount in stock is: %d\n", plant.plantstock);
-				printf("\n\t\tValue of stock is: $%.2f\n", plant.plantstockvalue);
-				break;
-			}//end if 
-		}//end while
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-			
-		if(found == 1)
-		{
-			printf("\n\t\tAre you sure you want to update this record.");
-			printf("\n\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{	
-				case 1:
-				printf("\n\t\tNew Plant name is: ");
-				scanf(" %[^\n]s", &plant.plantname);
-				
-				printf("\n\t\tNew Plant Cost Price/kg is: ");
-				scanf("%f", &plant.plantcost);
-				
-				plant.plantprice = plant.plantcost*MARKUP;
-				
-				printf("\n\t\tNew Amount in stock is: ");
-				scanf("%d", &plant.plantstock);
-				
-				plant.ogplantstock = plant.plantstock;
-					
-				plant.plantstockvalue = plant.plantprice*plant.plantstock; 
-		
-				plant.ogplantstockvalue = plant.plantstockvalue;
-					
-				fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-				break;	
-			
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}//end switch
-		}	
-	}//end else
-	fclose(fptrplant);
-}
-
-void UpdatePlantId()
-{
-	int id, option;
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	int found=0;
-	
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-		
-	else
-	{
-		printf("\n\t\tEnter id of the record to update.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrplant, (id-1) * sizeof(struct PlantInfo), SEEK_SET);
-		fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-		
-		if(plant.plantid != 0)
-		{
-			found=1;
-			
-			printf("\n\t\tId is: %d\n", plant.plantid);
-			printf("\n\t\tPlant Name is: %s\n", plant.plantname);
-			printf("\n\t\tCost Price/kg is: $%.2f\n", plant.plantcost);	
-			printf("\n\t\tSale Price/kg is: $%.2f\n", plant.plantprice);
-			printf("\n\t\tAmount in stock is: %d\n", plant.plantstock);
-			printf("\n\t\tValue of stock is: $%.2f\n", plant.plantstockvalue);	
-		}//end if
-		
-		if(found == 1)
-		{
-			printf("\n\t\tAre you sure you want to update this record.");
-			printf("\n\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{	
-				case 1:
-				printf("\n\t\tNew Plant name is: ");
-				scanf(" %[^\n]s", &plant.plantname);
-				
-				printf("\n\t\tNew Plant Cost Price/kg is: ");
-				scanf("%f", &plant.plantcost);
-				
-				plant.plantprice = plant.plantcost*MARKUP;
-				
-				printf("\n\t\tNew Amount in stock is: ");
-				scanf("%d", &plant.plantstock);
-					
-				plant.ogplantstock = plant.plantstock;
-					
-				plant.plantstockvalue = plant.plantprice*plant.plantstock; 
-		
-				plant.ogplantstockvalue = plant.plantstockvalue;
-		
-				fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-				break;	
-			
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}//end switch
-		}
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}//end else
-	fclose(fptrplant);
-}
-
-void UpdatePlant()//Update a plant record
-{
-	int choice;
-	printf("\n\t\t1. Search by name to update.");
-	printf("\n\t\t2. Search by ID to update.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		UpdatePlantName();
-		break;
-	
-		case 2:
-		UpdatePlantId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
-}//end of funtion
-
-void UpdateEquipmentName()//Update a equipment record
-{
-	int option, found = 0;
-	char name[SIZE];
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter name of the record that you want to update.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-		
-		while(fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip)==1)
-		{   
-			if(stricmp(name, equipment.equipname)==0)
-			{                              
-				found=1;
-				
-				printf("\n\t\tId is: %d\n", equipment.equipid);
-				printf("\n\t\tName is: %s\n", equipment.equipname);
-				printf("\n\t\tCost Price is: $%.2f\n", equipment.equipcost);	
-				printf("\n\t\tSale Price is: $%.2f\n", equipment.equipprice);
-				printf("\n\t\tAmount in stock is: %d\n", equipment.equipstock);
-				printf("\n\t\tValue of stock is: $%.2f\n", equipment.equipstockvalue);
-				break;
-			}//end if 
-		}//end while
-			
-		if(found == 1)
-		{
-			printf("\n\t\tAre you sure you want to update this record.");
-			printf("\n\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{	
-				case 1:
-				printf("\n\t\tNew name is: ");
-				scanf(" %[^\n]s", &equipment.equipname);
-				
-				printf("\n\t\tNew Cost Price is: ");
-				scanf("%f", &equipment.equipcost);
-				
-				equipment.equipprice = equipment.equipcost*MARKUP;
-				
-				printf("\n\t\tNew Amount in stock is: ");
-				scanf("%d", &equipment.equipstock);
-				
-				equipment.ogequipstock = equipment.equipstock;
-					
-				equipment.equipstockvalue = equipment.equipprice*equipment.equipstock; 
-		
-				equipment.ogequipstockvalue = equipment.equipstockvalue;
-		
-				fseek(fptrequip, (equipment.equipid-1)*sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to the file
-				break;	
-			
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}//end switch
-		}
-			
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}//end else
-	fclose(fptrequip);
-}
-
-void UpdateEquipmentId()//Update a equipment record
-{
-	int id, option, found = 0;
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter id of the record to update.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrequip, (id-1) * sizeof(struct EquipInfo), SEEK_SET);
-		fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-		
-		if(equipment.equipid != 0)
-		{
-			found=1;
-			
-			printf("\n\t\tId is: %d\n", equipment.equipid);
-			printf("\n\t\tName is: %s\n", equipment.equipname);
-			printf("\n\t\tCost Price is: $%.2f\n", equipment.equipcost);	
-			printf("\n\t\tSale Price is: $%.2f\n", equipment.equipprice);
-			printf("\n\t\tAmount in stock is: %d\n", equipment.equipstock);
-			printf("\n\t\tValue of stock is: $%.2f\n", equipment.equipstockvalue);
-		}//end if
-		
-		if(found == 1)
-		{
-			printf("\n\t\tAre you sure you want to update this record.");
-			printf("\n\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{	
-				case 1:
-				printf("\n\t\tNew name is: ");
-				scanf(" %[^\n]s", &equipment.equipname);
-				
-				printf("\n\t\tNew Cost Price is: ");
-				scanf("%f", &equipment.equipcost);
-				
-				equipment.equipprice = equipment.equipcost*MARKUP;
-				
-				printf("\n\t\tNew Amount in stock is: ");
-				scanf("%d", &equipment.equipstock);
-					
-				equipment.ogequipstock = equipment.equipstock;
-					
-				equipment.equipstockvalue = equipment.equipprice*equipment.equipstock; 
-		
-				equipment.ogequipstockvalue = equipment.equipstockvalue;
-		
-				fseek(fptrequip, (equipment.equipid-1)*sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to the file
-				break;	
-			
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}//end switch
-		}
-			
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}
-	fclose(fptrequip);
-}
-
-void UpdateEquipment()//Update a equipment record
-{
-	int choice;	
-	
-	printf("\n\t\t1. Search by name to update.");
-	printf("\n\t\t2. Search by ID to update.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		UpdateEquipmentName();
-		break;
-	
-		case 2:
-		UpdateEquipmentId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
-}//end of funtion
-
-void UpdateSaleName()
-{
-	struct SaleInfo sale;
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	int i = 0, j = 0, num = 0, num2 = 0, found = 0, choice, option, idp, ide, plantnum, equipnum;
-	char name[SIZE];
-	 
-	FILE*fptrplant;
-	fptrplant = fopen("SBADATAPLANT.bin", "rb+");
-	if (fptrplant == NULL)
-		printf("\n\t\tCannot open plant file \n");
-
-	FILE*fptrequip;
-	fptrequip = fopen("SBADATAEQUIP.bin", "rb+");	
-	if (fptrequip == NULL)
-		printf("\n\t\tCannot open equipment file \n");
-		
-	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		sale.totplant = 0;
-		sale.totequip = 0;
-		printf("\n\t\tEnter customer name of the record that you want to find.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-		
-		while(fread(&sale, sizeof(struct SaleInfo), 1, fptrsale)==1)
-		{   
-			if(stricmp(name, sale.customername)==0)
-			{                              
-				found=1;
-				printf("\n\t\tOrder Id is: %d\n", sale.saleid);
-				printf("\n\t\tCustomer Name is: %s\n", sale.customername);
-				if (sale.totequip > 0)
-				{
-					printf("\n\t\tEquipment Purchased:\n");
-					for(i=0;i<sale.totequip;i++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
-						printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
-						printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
-					}	
-				}
-				
-				if(sale.totplant > 0)
-				{
-					printf("\n\t\tPlants Purchased:\n");
-					for(j=0;j<sale.totplant;j++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
-						printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
-						printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
-					}	
-				}
-				printf("\n\t\tTotal is $%.2f\n", sale.cost);
-				break;	
-			}//end if    
-		}//end while
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-		
-		printf("\n\t\tAre you sure you want to update this record.");
-		printf("\n\t\t1 - yes\n\t\t2 - no\n");
-		printf("\n\t\tYou chose: ");
-		scanf("%d", &option);
-		
-		switch (option)
-		{
+	while(truth != 1) {
+		switch(choice) {
 			case 1:
-			printf("\n\t\tNew Customer name is: ");
-			scanf(" %[^\n]s", &sale.customername);	
-			printf("\n\t\tWhat items did the customer purchase?");
-			printf("\n\t\t1. Plants.\n\t\t2. Equipment.\n\t\t3. Plants and Equipment.\n\t\t");
-			scanf("%d", &choice);
-			
-			switch (choice)
-			{
-				case 1:
-				j=0;
-				sale.totplant=0;
-				printf("\n\t\t|==================================================|\n");
-	        	printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-	      	  	printf("\t\t|==================================================|\n\n");
-				ViewPlant();
-	
-				do
-				{	
-					printf("\n\n\t\tEnter the new id of the plant purchased.\n\t\t");
-					scanf("%d",&idp);
-				
-					fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-					fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					
-					while(plant.plantstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different plant id.\n\t\t");
-						scanf("%d",&idp);
-						fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-						fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the new quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &plantnum);
-					
-					if (plantnum>plant.plantstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", plant.plantstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &plantnum);
-					}
-				
-					sale.plantquant[j] = plantnum;
-					
-					sale.plantids[j] = idp;
-					
-					strcpy(sale.plantnames[j], plant.plantname);
-					
-					sale.plantprice[j] = plant.plantprice;
-					sale.planttotal[j] = sale.plantprice[j]*sale.plantquant[j];
-					sale.cost += sale.planttotal[j];
-					
-					plant.plantstock = plant.ogplantstock;
-					plant.plantstockvalue = plant.ogplantstockvalue;
-					
-					plant.plantstock -= sale.plantquant[j];
-					plant.plantstockvalue -= sale.planttotal[j];
-					fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-					
-					j++;
-					sale.totplant++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-				break;
-				
-				case 2:
-				i=0;
-				sale.totequip=0;
-				printf("\n\t\t|======================================================|\n");
-		    	printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-		  	  	printf("\t\t|======================================================|\n\n");
-				ViewEquipment();
-				do
-				{
-					printf("\n\n\t\tEnter new id of the equipment purchased.\n\t\t");
-					scanf("%d",&ide);
-				
-					fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-					fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					
-					while(equipment.equipstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different id.\n\t\t");
-						scanf("%d",&ide);
-						fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-						fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &equipnum);
-					
-					if (equipnum>equipment.equipstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", equipment.equipstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &equipnum);
-					}
-					
-					sale.equipquant[i] = equipnum;
-					
-					sale.equipids[i] = ide;
-					
-					strcpy(sale.equipnames[i], equipment.equipname);
-					
-					sale.equipprice[i] = equipment.equipprice;
-					sale.equiptotal[i] = sale.equipprice[i]*sale.equipquant[i];
-					sale.cost += sale.equiptotal[i];
-					
-					equipment.equipstock=equipment.ogequipstock;
-					equipment.equipstockvalue=equipment.ogequipstockvalue;
-					
-					equipment.equipstock -= sale.equipquant[i];
-					equipment.equipstockvalue -= sale.equiptotal[i];
-					fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to file
-					
-					i++;
-					sale.totequip++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-				break;
-				
-				case 3:
-				i=0;
-				j=0;
-				sale.totplant=0;
-				sale.totequip=0;
-				printf("\n\t\t|==================================================|\n");
-	        	printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-	      	  	printf("\t\t|==================================================|\n\n");
-				ViewPlant();
-				printf("\n\t\t|======================================================|\n");
-	        	printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-	      	  	printf("\t\t|======================================================|\n\n");
-				ViewEquipment();
-				do
-				{
-					printf("\n\n\t\tEnter id of the equipment purchased.\n\t\t");
-					scanf("%d",&ide);
-				
-					fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-					fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &equipnum);
-					
-					sale.equipquant[i] = equipnum;
-					
-					sale.equipids[i] = ide;
-					
-					strcpy(sale.equipnames[i], equipment.equipname);
-					
-					sale.equipprice[i] = equipment.equipprice;
-					sale.cost += sale.equipprice[i]*sale.equipquant[i];
-					
-					equipment.equipstock=equipment.ogequipstock;
-					equipment.equipstockvalue=equipment.ogequipstockvalue;
-					
-					equipment.equipstock -= sale.equipquant[i];
-					equipment.equipstockvalue -= sale.equipprice[i]*sale.equipquant[i];
-					fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to file
-					
-					i++;
-					sale.totequip++;
-					printf("\n\t\tEnter -1 to stop adding equipment to the order. Enter 0 to continue adding equipment.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-					
-				do
-				{
-					printf("\n\n\t\tEnter id of the plant purchased.\n\t\t");
-					scanf("%d",&idp);
-				
-					fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-					fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &plantnum);
-					
-					if (plantnum>plant.plantstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", plant.plantstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &plantnum);
-					}
-					
-					sale.plantquant[j] = plantnum;
-					
-					sale.plantids[j] = idp;
-					
-					strcpy(sale.plantnames[j], plant.plantname);
-					
-					sale.plantprice[j] = plant.plantprice;
-					sale.cost += sale.plantprice[j]*sale.plantquant[j];
-					
-					plant.plantstock = plant.ogplantstock;
-					plant.plantstockvalue = plant.ogplantstockvalue;
-					
-					plant.plantstock -= sale.plantquant[j];
-					plant.plantstockvalue -= sale.plantprice[j]*sale.plantquant[j];
-					fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-					
-					j++;
-					sale.totplant++;
-					printf("\n\t\tEnter -1 to stop adding plants to the order. Enter 0 to continue adding plants.\n\t\t");
-					scanf("%d", &num2);
-					if (num2 == -1)
-					{
-						break;
-					}
-				}
-				while (num2 == 0);
-				break;
-			}
+				truth = 1;
+				AddToSale(1, name, 0, "ab+", 0);
 			break;
 			
 			case 2:
+				truth = 1;
+				AddToSale(2, name, 0, "ab+", 0);
 			break;
 			
+			case 3:
+				truth = 1;
+				AddToSale(3, name, 0, "ab+", 0);
+			break;
+
 			default:
-			printf("\n\t\tInvalid option.");
-			break;
-		}
-		fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
-		fwrite(&sale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file	
-	}
-	fclose(fptrsale);
-	fclose(fptrplant);
-	fclose(fptrequip);
-}
-
-
-void UpdateSaleId()
-{
-	struct SaleInfo sale;
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	int i = 0, j = 0, num = 0, num2 = 0, found = 0, choice, option, idp, ide, plantnum, equipnum, id;
-	 
-	FILE*fptrplant;
-	fptrplant = fopen("SBADATAPLANT.bin", "rb+");
-	if (fptrplant == NULL)
-		printf("\n\t\tCannot open plant file \n");
-
-	FILE*fptrequip;
-	fptrequip = fopen("SBADATAEQUIP.bin", "rb+");	
-	if (fptrequip == NULL)
-		printf("\n\t\tCannot open equipment file \n");
-	
-	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter id of the record to update.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrsale, (id-1) * sizeof(struct SaleInfo), SEEK_SET);
-		fread(&sale, sizeof(struct SaleInfo), 1, fptrsale);//reads a block of data
-		
-		if (sale.saleid != 0)
-		{
-			found=1;
-			printf("\n\t\tOrder Id is: %d\n", sale.saleid);
-			printf("\n\t\tCustomer Name is: %s\n", sale.customername);
-			if (sale.totequip > 0)
-			{
-				printf("\n\t\tEquipment Purchased:\n");
-				for(i=0;i<sale.totequip;i++)
-				{
-					printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
-					printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
-					printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
-					printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
-					printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
-				}	
-			}
-			
-			if(sale.totplant > 0)
-			{
-				printf("\n\t\tPlants Purchased:\n");
-				for(j=0;j<sale.totplant;j++)
-				{
-					printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
-					printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
-					printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
-					printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
-					printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
-				}	
-			}
-			printf("\n\t\tTotal is $%.2f\n", sale.cost);
-		}//end if
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-		
-		printf("\n\t\tAre you sure you want to update this record.");
-		printf("\n\t\t1 - yes\n\t\t2 - no\n");
-		printf("\n\t\tYou chose: ");
-		scanf("%d", &option);
-		
-		switch (option)
-		{
-			case 1:
-			printf("\n\t\tNew Customer name is: ");
-			scanf(" %[^\n]s", &sale.customername);	
+			printf("\n\t\tInvalid option\n");
 			printf("\n\t\tWhat items did the customer purchase?");
 			printf("\n\t\t1. Plants.\n\t\t2. Equipment.\n\t\t3. Plants and Equipment.\n\t\t");
-			scanf("%d", &choice);
-			
-			switch (choice)
-			{
-				case 1:
-				j=0;
-				sale.totplant=0;
-				printf("\n\t\t|==================================================|\n");
-	        	printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-	      	  	printf("\t\t|==================================================|\n\n");
-				ViewPlant();
-	
-				do
-				{	
-					printf("\n\n\t\tEnter the new id of the plant purchased.\n\t\t");
-					scanf("%d",&idp);
-				
-					fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-					fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					
-					while(plant.plantstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different plant id.\n\t\t");
-						scanf("%d",&idp);
-						fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-						fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the new quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &plantnum);
-					
-					if (plantnum>plant.plantstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", plant.plantstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &plantnum);
-					}
-					
-					sale.plantquant[j] = plantnum;
-					
-					sale.plantids[j] = idp;
-					
-					strcpy(sale.plantnames[j], plant.plantname);
-					
-					sale.plantprice[j] = plant.plantprice;
-					sale.planttotal[j] = sale.plantprice[j]*sale.plantquant[j];
-					sale.cost += sale.planttotal[j];
-					
-					plant.plantstock = plant.ogplantstock;
-					plant.plantstockvalue = plant.ogplantstockvalue;
-					
-					plant.plantstock -= sale.plantquant[j];
-					plant.plantstockvalue -= sale.planttotal[j];
-					fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-					
-					j++;
-					sale.totplant++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-				break;
-				
-				case 2:
-				i=0;
-				sale.totequip=0;
-				printf("\n\t\t|======================================================|\n");
-		    	printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-		  	  	printf("\t\t|======================================================|\n\n");
-				ViewEquipment();
-				do
-				{
-					printf("\n\n\t\tEnter new id of the equipment purchased.\n\t\t");
-					scanf("%d",&ide);
-				
-					fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-					fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					
-					while(equipment.equipstock == 0)
-					{
-						printf("\n\n\t\tItem out of stock.");
-						printf("\n\t\tEnter a different id.\n\t\t");
-						scanf("%d",&ide);
-						fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-						fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					}
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &equipnum);
-					
-					if (equipnum>equipment.equipstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", equipment.equipstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &equipnum);
-					}
-					
-					sale.equipquant[i] = equipnum;
-					
-					sale.equipids[i] = ide;
-					
-					strcpy(sale.equipnames[i], equipment.equipname);
-					
-					sale.equipprice[i] = equipment.equipprice;
-					sale.equiptotal[i] = sale.equipprice[i]*sale.equipquant[i];
-					sale.cost += sale.equiptotal[i];
-					
-					equipment.equipstock=equipment.ogequipstock;
-					equipment.equipstockvalue=equipment.ogequipstockvalue;
-					
-					equipment.equipstock -= sale.equipquant[i];
-					equipment.equipstockvalue -= sale.equiptotal[i];
-					fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to file
-					
-					i++;
-					sale.totequip++;
-					printf("\n\t\tEnter -1 to stop adding items to the order. Enter 0 to continue adding items.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-				break;
-				
-				case 3:
-				i=0;
-				j=0;
-				sale.totplant=0;
-				sale.totequip=0;
-				printf("\n\t\t|==================================================|\n");
-	        	printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-	      	  	printf("\t\t|==================================================|\n\n");
-				ViewPlant();
-				printf("\n\t\t|======================================================|\n");
-	        	printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-	      	  	printf("\t\t|======================================================|\n\n");
-				ViewEquipment();
-				do
-				{
-					printf("\n\n\t\tEnter id of the equipment purchased.\n\t\t");
-					scanf("%d",&ide);
-				
-					fseek(fptrequip, (ide-1) * sizeof(struct EquipInfo), SEEK_SET);
-					fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &equipnum);
-					
-					sale.equipquant[i] = equipnum;
-					
-					sale.equipids[i] = ide;
-					
-					strcpy(sale.equipnames[i], equipment.equipname);
-					
-					sale.equipprice[i] = equipment.equipprice;
-					sale.cost += sale.equipprice[i]*sale.equipquant[i];
-					
-					equipment.equipstock=equipment.ogequipstock;
-					equipment.equipstockvalue=equipment.ogequipstockvalue;
-					
-					equipment.equipstock -= sale.equipquant[i];
-					equipment.equipstockvalue -= sale.equipprice[i]*sale.equipquant[i];
-					fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//write record to file
-					
-					i++;
-					sale.totequip++;
-					printf("\n\t\tEnter -1 to stop adding equipment to the order. Enter 0 to continue adding equipment.\n\t\t");
-					scanf("%d", &num);
-					if (num == -1)
-					{
-						break;
-					}
-				}
-				while (num == 0);
-					
-				do
-				{
-					printf("\n\n\t\tEnter id of the plant purchased.\n\t\t");
-					scanf("%d",&idp);
-				
-					fseek(fptrplant, (idp-1) * sizeof(struct PlantInfo), SEEK_SET);
-					fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-					
-					printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-					scanf("%d", &plantnum);
-					
-					if (plantnum>plant.plantstock)
-					{
-						printf("\n\t\tNot enough in stock. Please enter a value less than %d", plant.plantstock);
-						printf("\n\t\tEnter the quantity of this item that the customer purchased.\n\t\t");
-						scanf("%d", &plantnum);
-					}
-					
-					sale.plantquant[j] = plantnum;
-					
-					sale.plantids[j] = idp;
-					
-					strcpy(sale.plantnames[j], plant.plantname);
-					
-					sale.plantprice[j] = plant.plantprice;
-					sale.cost += sale.plantprice[j]*sale.plantquant[j];
-					
-					plant.plantstock = plant.ogplantstock;
-					plant.plantstockvalue = plant.ogplantstockvalue;
-					
-					plant.plantstock -= sale.plantquant[j];
-					plant.plantstockvalue -= sale.plantprice[j]*sale.plantquant[j];
-					fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo),SEEK_SET);//moves file pointer to the beginning of the file
-					fwrite(&plant, sizeof(struct PlantInfo), 1, fptrplant);//write record to the file
-					
-					j++;
-					sale.totplant++;
-					printf("\n\t\tEnter -1 to stop adding plants to the order. Enter 0 to continue adding plants.\n\t\t");
-					scanf("%d", &num2);
-					if (num2 == -1)
-					{
-						break;
-					}
-				}
-				while (num2 == 0);
-				
-				break;
-			}
-			break;
-			
-			case 2:
-			break;
-			
-			default:
-			printf("\n\t\tInvalid option.");
+			choice = checknum(1);
 			break;
 		}
-		fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
-		fwrite(&sale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file	
-	}
-	fclose(fptrsale);
-	fclose(fptrplant);
-	fclose(fptrequip);
-}
-
-void UpdateSale()//Update a sale record
-{
-	int choice;
-	printf("\n\t\t1. Search by name to update.");
-	printf("\n\t\t2. Search by ID to update.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		UpdateSaleName();
-		break;
-		
-		case 2:
-		UpdateSaleId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
+	}//end while
 }//end of funtion
 
-void DeletePlantName()
-{
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	struct PlantInfo deleteplant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	char name[SIZE]; 
-	int option, found=0; 
-	
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-	{
+void SearchItem(char filename[], int action) {//Search for a plant record
+    struct ItemInfo item = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+	struct ItemInfo delete = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
+	int choice, truth = 0, id, found = 0, option;
+	float cost;
+    char name[SIZE]; 
+	FILE *fp;//file pointer
+	if	((fp = fopen(filename, "rb+")) == NULL)
 		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter name of the record that you want to delete.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-		
-		while(fread(&plant, sizeof(struct PlantInfo), 1, fptrplant)==1)
-		{   
-			if(stricmp(name, plant.plantname)==0)
-			{                              
-				found=1;
-				
-				printf("\n\t\tId is: %d\n", plant.plantid);
-				printf("\n\t\tPlant Name is: %s\n", plant.plantname);
-				printf("\n\t\tCost Price/kg is: $%.2f\n", plant.plantcost);	
-				printf("\n\t\tSale Price/kg is: $%.2f\n", plant.plantprice);
-				printf("\n\t\tAmount in stock is: %d\n", plant.plantstock);
-				printf("\n\t\tValue of stock is: $%.2f\n", plant.plantstockvalue);
-				break;
-			}//end if 
-		}//end while
-		
-		if (found == 1)
-		{
-			printf("\n\t\tAre you sure you want to delete this record?\n");	
-			printf("\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{
-				case 1:
-				fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo), SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&deleteplant, sizeof(struct PlantInfo), 1, fptrplant);//deletes record by overwriting with a blank record
-				break;
-				
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}//end switch		
-		}
-			
-		if (found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}				
-	}//end else
-	fclose(fptrplant);
-}
 
-void DeletePlantId()//Delete a plant record
-{
-	int id, option;
-	struct PlantInfo plant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	struct PlantInfo deleteplant = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	int found=0; 
-	
-	FILE *fptrplant;//file pointer
-	if	((fptrplant = fopen("SBADATAPLANT.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-		
-	else
-	{
-		printf("\n\t\tEnter id of the record to delete.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrplant, (id-1) * sizeof(struct PlantInfo), SEEK_SET);
-		fread(&plant, sizeof(struct PlantInfo), 1, fptrplant);//reads a block of data
-		
-		if(plant.plantid != 0)
-		{
-			found=1;
-				
-			printf("\n\t\tId is: %d\n", plant.plantid);
-			printf("\n\t\tPlant Name is: %s\n", plant.plantname);
-			printf("\n\t\tCost Price/kg is: $%.2f\n", plant.plantcost);	
-			printf("\n\t\tSale Price/kg is: $%.2f\n", plant.plantprice);
-			printf("\n\t\tAmount in stock is: %d\n", plant.plantstock);
-			printf("\n\t\tValue of stock is: $%.2f\n", plant.plantstockvalue);
-			
-			printf("\n\t\tAre you sure you want to delete this record?\n");
-			printf("\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{
-				case 1:
-				fseek(fptrplant, (plant.plantid-1)*sizeof(struct PlantInfo), SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&deleteplant, sizeof(struct PlantInfo), 1, fptrplant);//deletes record by overwriting with a blank record
+    else {
+        printf("\n\t\t1. Search by name.");
+        printf("\n\t\t2. Search by ID.\n\t\t");
+        choice = checknum(1);
+        
+        while(truth != 1) {
+            switch (choice) {
+                case 1:
+                truth = 1;
+                printf("\n\t\tEnter name of the record that you want to find.\n");
+                printf("\t\tYou chose: ");
+                scanf(" %[^\n]s", &name);//allows spaces to be read
+                
+                while(fread(&item, sizeof(struct ItemInfo), 1, fp)==1) {   
+                    if(stricmp(name, item.name)==0) {
+					    found=1;
+						break;
+					}
+                }
 				break;
-				
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}//end switch		
-		}//end if
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}//end else
-	fclose(fptrplant);	
-}//end of function
+                
+                case 2:
+                truth = 1;
+                printf("\n\t\tEnter id of the record to find.");
+                printf("\n\n\t\tYou chose: ");
+                id = checknum(1);
+                
+                fseek(fp, (id-1) * sizeof(struct ItemInfo), SEEK_SET);
+                fread(&item, sizeof(struct ItemInfo), 1, fp);//reads a block of data
+                
+                if(item.id != 0)
+                    found=1;
+                break;
+                    
+                default:
+                choice = InvalidOption(choice);
+                break;
+            }//end switch
+        }//end while
 
-void DeletePlant()
-{
-	int choice;
-	
-	printf("\n\t\t1. Search by name to delete.");
-	printf("\n\t\t2. Search by ID to delete.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		DeletePlantName();
-		break;
-		
-		case 2:
-		DeletePlantId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
-}
-
-void DeleteEquipmentName()
-{
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	struct EquipInfo deleteequipment = {0, "", 0.0, 0.0, 0, 0.0};
-	char name[SIZE];
-	int option, found=0;
-	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter name of the record that you want to delete.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-	
-		while(fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip)==1)
-		{   
-			if(stricmp(name, equipment.equipname)==0)
-			{                              
-				found=1;
-				
-				printf("\n\t\tId is: %d\n", equipment.equipid);
-				printf("\n\t\tEquipment Name is: %s\n", equipment.equipname);
-				printf("\n\t\tCost Price is: $%.2f\n", equipment.equipcost);
-				printf("\n\t\tSale Price is: $%.2f\n", equipment.equipprice);
-				printf("\n\t\tAmount in stock is %d\n", equipment.equipstock);
-				printf("\n\t\tValue of stock is $%.2f\n", equipment.equipstockvalue);
-		
-			}//end if
-		}//end while
-		
-		if (found == 1)
-		{
-			printf("\n\t\tAre you sure you want to delete this record?\n");
-			printf("\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
+        if(found == 1) {
+			truth = 0;
+            printf("\n\t\tId is: %d\n", item.id);
+            printf("\n\t\tItem Name is: %s\n", item.name);
+            printf("\n\t\tCost Price is: $%.2f\n", item.cost);	
+            printf("\n\t\tSale Price is: $%.2f\n", item.price);
+            printf("\n\t\tAmount in stock is: %d\n", item.stock);
+            printf("\n\t\tValue of stock is: $%.2f\n", item.stockvalue);  
 			
-			switch (option)
-			{
-				case 1:
-				fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo), SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&deleteequipment, sizeof(struct EquipInfo), 1, fptrequip);//deletes record by overwriting with a blank record
-				break;
+			if (action == 1) {
+				printf("\n\t\tAre you sure you want to delete this record?\n");
+				printf("\t\t1 - yes\n\t\t2 - no\n");
+				printf("\n\t\tYou chose: ");
+				choice = checknum(1);
 				
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
+				while(truth != 1) {
+					switch (choice) {
+						case 1:
+						truth = 1;
+						printf("\n\t\tRecord Deleted");
+						fseek(fp, (item.id-1) * sizeof(struct ItemInfo), SEEK_SET);//moves file pointer to the beginning of the file
+						fwrite(&delete, sizeof(struct ItemInfo), 1, fp);//deletes record by overwriting with a blank record
+						break;
+						
+						case 2:
+						truth = 1;
+						break;
+							
+						default:
+						choice = InvalidOption(choice);
+						break;
+					}
+				}				
 			}
-		}
-		
-		if (found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}
-	}//end else
-	fclose(fptrequip);
-}
 
-void DeleteEquipmentId()//Delete an equipment record
-{
-	int id, option;
-	struct EquipInfo equipment = {0, "", 0.0, 0.0, 0, 0.0, 0, 0.0};
-	struct EquipInfo deleteequipment = {0, "", 0.0, 0.0, 0, 0.0};
-	int found=0; 
-	
-	FILE *fptrequip;//file pointer
-	if	((fptrequip = fopen("SBADATAEQUIP.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-		
-	else
-	{
-		printf("\n\t\tEnter id of the record to delete.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrequip, (id-1) * sizeof(struct EquipInfo), SEEK_SET);
-		fread(&equipment, sizeof(struct EquipInfo), 1, fptrequip);//reads a block of data
-		
-		if(equipment.equipid != 0)
-		{
-			found=1;
-			
-			printf("\n\t\tId is: %d\n", equipment.equipid);
-			printf("\n\t\tEquipment Name is: %s\n", equipment.equipname);
-			printf("\n\t\tCost Price is: $%.2f\n", equipment.equipcost);
-			printf("\n\t\tSale Price is: $%.2f\n", equipment.equipprice);
-			printf("\n\t\tAmount in stock is %d\n", equipment.equipstock);
-			printf("\n\t\tValue of stock is $%.2f\n", equipment.equipstockvalue);
-			
-			printf("\n\t\tAre you sure you want to delete this record?\n");
-			printf("\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{
-				case 1:
-				fseek(fptrequip, (equipment.equipid-1) * sizeof(struct EquipInfo), SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&deleteequipment, sizeof(struct EquipInfo), 1, fptrequip);//deletes record by overwriting with a blank record
-				break;
+			else if (action == 2) {
+				printf("\n\t\tAre you sure you want to update this record.");
+				printf("\n\t\t1 - yes\n\t\t2 - no\n");
+				printf("\n\t\tYou chose: ");
+				option = checknum(1);
 				
-				case 2:
-				break;
+				while(truth != 1) {
+					switch (option) {	
+						case 1:
+						truth = 1;
+						printf("\n\t\tNew name is: ");
+						scanf(" %[^\n]s", &item.name);
+						printf("\n\t\tNew Cost Price is: ");
+						cost = checknum(0);
+						item.cost = cost;
+						item.price = item.cost*MARKUP;
+						printf("\n\t\tNew Amount in stock is: ");
+						item.stock = checknum(1);
+						item.ogstock = item.stock;
+						item.stockvalue = item.price*item.stock; 
+						item.ogstockvalue = item.stockvalue;
 				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
+						fseek(fp, (item.id-1)*sizeof(struct ItemInfo),SEEK_SET);//moves file pointer to the beginning of the file
+						fwrite(&item, sizeof(struct ItemInfo), 1, fp);//write record to the file
+						break;	
+					
+						case 2:
+						truth = 1;
+						break;
+						
+					default:
+					option = InvalidOption(option);
+					break;
+					}//end switch
+				}//end while				
 			}
-		}//end if
-
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-
-	}//end else	
-	fclose(fptrequip);
+        }//end if
+        
+        else if (found == 0)
+            printf("\n\t\tRecord not found.\n");
+    }
+    fclose(fp);
 }//end of funtion
 
-void DeleteEquipment()
-{
-	int choice;
-	
-	printf("\n\t\t1. Search by name to delete.");
-	printf("\n\t\t2. Search by ID to delete.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		DeleteEquipmentName();
-		break;
-		
-		case 2:
-		DeleteEquipmentId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
-}
 
-void DeleteSaleName()
-{
-	int option, i, j, found = 0;
-	char name[SIZE];
-	struct SaleInfo sale;
-	struct SaleInfo deletesale = {
-	0,
-	"",
-	0.0,
-	{0, 0, 0},
-	{0, 0, 0},
-	{0.0, 0.0, 0.0},	
-	{0.0, 0.0, 0.0},	
-	{"", "", ""},	
-	{"", "", ""},	
-	{0, 0, 0},
-	{0, 0, 0},
-	0,
-	0,
-	{0.0, 0.0, 0.0},	
-	{0.0, 0.0, 0.0}
-};
-	
+void SearchSale(int action) {//Search for a sale record
+	struct SaleInfo sale = {0, "", 0.0, {0, 0, 0}, {0, 0, 0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {"", "", ""}, {"", "", ""}, {0, 0, 0}, {0, 0, 0}, 0, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, 0.0, 0.0};
+	struct SaleInfo deletesale = {0, "", 0.0, {0, 0, 0}, {0, 0, 0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {"", "", ""}, {"", "", ""}, {0, 0, 0}, {0, 0, 0}, 0, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, 0.0, 0.0};
+	int choice, truth = 0, found = 0, id, i=0 ,j=0, type;
+    char name[SIZE]; 
 	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "rb+")) == NULL)
-	{
+	if	((fptrsale = fopen("data\\saledata.bin", "rb+")) == NULL)
 		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter name of the record that you want to delete.\n");
-		printf("\t\tYou chose: ");
-		scanf(" %[^\n]s", &name);//allows spaces to be read
-		
-		while(fread(&sale, sizeof(struct SaleInfo), 1, fptrsale)==1)
-		{
-			if(stricmp(name, sale.customername)==0)
-			{
-				found=1;
-			
-				printf("\n\t\tOrder Id is: %d\n", sale.saleid);
-				printf("\n\t\tCustomer Name is: %s\n", sale.customername);
-				if (sale.totequip > 0)
-				{
-					printf("\n\t\tEquipment Purchased:\n");
-					for(i=0;i<sale.totequip;i++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
-						printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
-						printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
-					}	
-				}
-				
-				if(sale.totplant > 0)
-				{
-					printf("\n\t\tPlants Purchased:\n");
-					for(j=0;j<sale.totplant;j++)
-					{
-						printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
-						printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
-						printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
-						printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
-						printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
-					}	
-				}
-				printf("\n\t\tTotal is $%.2f\n", sale.cost);	
-			}
-		}
-		
-		if (found == 1)
-		{
-			printf("\n\t\tAre you sure you want to delete this record?\n");
-			printf("\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{
-				case 1:
-				fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&deletesale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file
-				break;
-				
-				case 2:
-				break;
-				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}	
-		}
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}
-	fclose(fptrsale);
-}
 
-void DeleteSaleId()//Delete a sale record
-{
-	int id, option, i, j;
-	struct SaleInfo sale;
-	struct SaleInfo deletesale = {
-	0,
-	"",
-	0.0,
-	{0, 0, 0},
-	{0, 0, 0},
-	{0.0, 0.0, 0.0},	
-	{0.0, 0.0, 0.0},	
-	{"", "", ""},	
-	{"", "", ""},	
-	{0, 0, 0},
-	{0, 0, 0},
-	0,
-	0,
-	{0.0, 0.0, 0.0},	
-	{0.0, 0.0, 0.0}
-};
-	int found=0; 
-	
-	FILE *fptrsale;//file pointer
-	if	((fptrsale = fopen("SBADATASALE.bin", "rb+")) == NULL)
-	{
-		printf("\n\t\tCannot open file \n");
-	}//end if
-	
-	else
-	{
-		printf("\n\t\tEnter id of the record to delete.");
-		printf("\n\n\t\tYou chose: ");
-		scanf("%d",&id);
-		
-		fseek(fptrsale, (id-1) * sizeof(struct SaleInfo), SEEK_SET);
-		fread(&sale, sizeof(struct SaleInfo), 1, fptrsale);//reads a block of data
-		
-		if(sale.saleid != 0)
-		{
-			found=1;
-			
-			printf("\n\t\tOrder Id is: %d\n", sale.saleid);
-			printf("\n\t\tCustomer Name is: %s\n", sale.customername);
-			if (sale.totequip > 0)
-			{
-				printf("\n\t\tEquipment Purchased:\n");
-				for(i=0;i<sale.totequip;i++)
-				{
-					printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
-					printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
-					printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
-					printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
-					printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
-				}	
-			}
-			
-			if(sale.totplant > 0)
-			{
-				printf("\n\t\tPlants Purchased:\n");
-				for(j=0;j<sale.totplant;j++)
-				{
-					printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
-					printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
-					printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
-					printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
-					printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
-				}	
-			}
-			printf("\n\t\tTotal is $%.2f\n", sale.cost);
-			
-		}
-		
-		if (found == 1)
-		{
-			printf("\n\t\tAre you sure you want to delete this record?\n");
-			printf("\t\t1 - yes\n\t\t2 - no\n");
-			printf("\n\t\tYou chose: ");
-			scanf("%d", &option);
-			
-			switch (option)
-			{
-				case 1:
-				fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
-				fwrite(&deletesale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file
-				break;
+    else {
+        printf("\n\t\t1. Search by name.");
+        printf("\n\t\t2. Search by ID.\n\t\t");
+        choice = checknum(1);
+        
+        while(truth != 1) {
+            switch (choice) {
+                case 1:
+                truth = 1;
+                printf("\n\t\tEnter customer name of the record that you want to find.\n");
+                printf("\t\tYou chose: ");
+                scanf(" %[^\n]s", &name);//allows spaces to be read
+                
+                while(fread(&sale, sizeof(struct SaleInfo), 1, fptrsale)==1) {   
+                    if(stricmp(name, sale.customername)==0) {                              
+                        found=1;
+                        break;
+                    }
+                }
+                break;
+                
+                case 2:
+                truth = 1;
+                printf("\n\t\tEnter id of the record to find.");
+                printf("\n\n\t\tYou chose: ");
+                id = checknum(1);
+                
+                fseek(fptrsale, (id-1) * sizeof(struct SaleInfo), SEEK_SET);
+                fread(&sale, sizeof(struct SaleInfo), 1, fptrsale);//reads a block of data
+            
+                if(sale.saleid != 0)
+                    found=1;
+                break;
+                
+                default:
+                choice = InvalidOption(choice);
+                break;
+            }//end switch
+        }//end while
+
+        if (found == 1) {
+			truth = 0;
+            printf("\n\t\tOrder Id is: %d\n", sale.saleid);
+            printf("\n\t\tCustomer Name is: %s\n", sale.customername);
+            if (sale.totequip > 0) {
+                printf("\n\t\tEquipment Purchased:\n");
+                for(i=0;i<sale.totequip;i++) {
+                    printf("\n\t\t\tItem Name: %s", sale.equipnames + i);
+                    printf("\n\t\t\tItem Id: %d", sale.equipids[i]);
+                    printf("\n\t\t\tItem price: $%.2f", sale.equipprice[i]);
+                    printf("\n\t\t\tQuantity of Item: %d",sale.equipquant[i]);
+                    printf("\n\t\t\tTotal for Item: $%.2f\n",sale.equiptotal[i]);
+                }	
+            }
+            
+            if(sale.totplant > 0) {
+                printf("\n\t\tPlants Purchased:\n");
+                for(j=0;j<sale.totplant;j++)
+                {
+                    printf("\n\t\t\tItem Name: %s", sale.plantnames + j);
+                    printf("\n\t\t\tItem Id: %d", sale.plantids[j]);
+                    printf("\n\t\t\tItem price: $%.2f", sale.plantprice[j]);
+                    printf("\n\t\t\tQuantity of Item: %d",sale.plantquant[j]);
+                    printf("\n\t\t\tTotal for Item: $%.2f\n",sale.planttotal[j]);
+                }	
+            }
+            printf("\n\t\tTotal is $%.2f\n", sale.cost);	
+
+			if (action == 1) {
+				printf("\n\t\tAre you sure you want to delete this record?\n");
+				printf("\t\t1 - yes\n\t\t2 - no\n");
+				printf("\n\t\tYou chose: ");
+				choice = checknum(1);
 				
-				case 2:
-				break;
+				while(truth != 1) {
+					switch (choice) {
+						case 1:
+						truth = 1;
+						printf("\n\t\tRecord Deleted");
+						fseek(fptrsale, (sale.saleid-1) * sizeof(struct SaleInfo),SEEK_SET);//moves file pointer to the beginning of the file
+						fwrite(&deletesale, sizeof(struct SaleInfo), 1, fptrsale);//write record to file
+						break;
+						
+						case 2:
+						truth = 1;
+						break;
+						
+						default:
+						choice = InvalidOption(choice);
+						break;
+					}//end switch	
+				}//end while
+			}
+
+			else if (action == 2) {
+				printf("\n\t\tAre you sure you want to update this record?\n");
+				printf("\t\t1 - yes\n\t\t2 - no\n");
+				printf("\n\t\tYou chose: ");
+				choice = checknum(1);
 				
-				default:
-				printf("\n\t\tInvalid option.");
-				break;
-			}	
+				while(truth != 1) {
+					switch (choice) {
+						case 1:
+						truth = 1;	
+                        printf("\n\t\tCustomer name is: ");
+                        scanf(" %[^\n]s", &name);
+                        printf("\n\t\tWhat items did the customer purchase?");
+                        printf("\n\t\t1. Plants.\n\t\t2. Equipment.\n\t\t3. Plants and Equipment.\n\t\t");
+                        type = checknum(1);
+                        AddToSale(type, name, 1, "rb+", sale.saleid);
+                        break;
+
+                        case 2:
+                        truth = 1;
+                        break;
+
+						default:
+						choice = InvalidOption(choice);
+						break;                        
+					}
+				}//end if
+            }
 		}
-		
-		if(found == 0)
-		{
-			printf("\n\t\tRecord not found.\n");
-		}//end if
-	}//end else
-	fclose(fptrsale);
+
+        if(found == 0)
+            printf("\n\t\tRecord not found.\n");
+    }
 }//end of funtion
 
-void DeleteSale()
-{
-	int choice;
+void Dequeue() {
+	struct QueueInfo queue[MAX_LENGTH] = {0, 0, 0.0, "", ""};
+	struct QueueInfo element = {0, 0, 0.0, "", ""};
+	int i, truth = 0, choice;
+	FILE *fp;//file pointer
+	if	((fp = fopen("data\\queuedata.bin", "rb+")) == NULL)
+		printf("\n\t\tCannot open file \n");
 	
-	printf("\n\t\t1. Search by name to delete.");
-	printf("\n\t\t2. Search by ID to delete.\n\t\t");
-	scanf("%d", &choice);
-	
-	switch (choice)
-	{
-		case 1:
-		DeleteSaleName();
-		break;
-		
-		case 2:
-		DeleteSaleId();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
-	
+	else {
+		if (!is_empty()) {
+			printf("\n\t\tAre you sure you want to dequeue?\n");	
+			printf("\t\t1 - yes\n\t\t2 - no\n");
+			printf("\n\t\tYou chose: ");
+			choice = checknum(1);
+			
+			while(truth != 1) {
+				switch (choice) {
+					case 1:
+					truth = 1;
+					for (i = 0; i <= read_id(); i++) {
+						fread(&element, sizeof(struct QueueInfo), 1, fp);
+						queue[i] = element;
+						queue[i].id -= 1;
+					}
+
+					for (i = 0; i <= read_id(); i++) {
+						queue[i] = queue[i+1];
+					}
+					decrement_id();
+				
+					for (i = 0; i <= read_id(); i++) {
+						fseek(fp, (i) * sizeof(struct QueueInfo), SEEK_SET); 
+						fwrite(&queue[i], sizeof(struct QueueInfo), 1, fp);  
+					}
+					break;
+					
+					case 2:
+					truth = 1;
+					break;
+					
+					default:
+					choice = InvalidOption(choice);
+					break;
+				}//end switch
+			}//end while
+		}
+	}//
+    fclose(fp);
 }
 
-void CreateFile()//Sub menu to allow user to select what type of file they would like to create
-{
-	int option;
+void CreateFile() {//Sub menu to allow user to select what type of file they would like to create
+	int option, truth = 0;
+	
 	printf("\n\tWhat type of file would you like to create.\n\n");
 	printf("\t0. Exit to main menu.\n\n");
 	printf("\t1. Create a file for plant records.\n\n");
 	printf("\t2. Create a file for equipment records.\n\n");
-	printf("\t3. Create a file for sale records.\n\n");
+	printf("\t3. Create a file for limited item records.\n\n");
+	printf("\t4. Create a file for sale records.\n\n");
+	printf("\t5. Create a file for queue.\n\n");
 	printf("\t\tYou chose: ");
-	scanf("%d", &option);
+	option = checknum(1);
 	printf("\n\t--------------------------------------------------------------------");
 	
-	switch(option)
-	{
-		case 0:
-		break;
-		
-		case 1:
-		CreatePlantFile();
-		break;
-		
-		case 2:
-		CreateEquipmentFile();
-		break;
-		
-		case 3:
-		CreateSaleFile();
-		break;
-	}
+	while(truth != 1) {
+		switch(option) {
+			case 0:
+			truth = 1;
+			break;
+			
+			case 1:
+			truth = 1;
+			CreateRecordFile("data\\plantdata.bin", 0);
+			break;
+			
+			case 2:
+			truth = 1;
+			CreateRecordFile("data\\equipdata.bin", 0);
+			break;
+
+			case 3:
+			truth = 1;
+			CreateRecordFile("data\\limitemdata.bin", 0);
+			break;
+
+			case 4:
+			truth = 1;
+			CreateRecordFile("data\\saledata.bin", 0);
+			break;
+
+			case 5:
+			truth = 1;
+			CreateRecordFile("data\\queuedata.bin", 1);
+			break;
+			
+			default:
+			option = InvalidOption(option);
+			break;
+		}//end switch
+	}//end while
 	printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
 }//end of funtion
 
-void View()//sub menu allows user to select what type of record to view
-{
-	int option;
+void View() {//sub menu allows user to select what type of record to view
+	int option, truth = 0;
 	
 	printf("\n\tWhat type of record would you like to view?\n\n");
 	printf("\t0. Exit to main menu.\n\n");
 	printf("\t1. View plant record.\n\n");
 	printf("\t2. View equipment record.\n\n");
 	printf("\t3. View sale record.\n\n");
+	printf("\t4. View limited item.\n\n");
+	printf("\t5. View queue.\n\n");
 	printf("\t\tYou chose: ");
-	scanf("%d", &option);
+	option = checknum(1);
 	printf("\n\t--------------------------------------------------------------------");
 	
-	switch(option)
-	{
-		case 0:
-		break;
-		
-		case 1:
-		system("cls");
-		printf("\n\t\t|==================================================|\n");
-    	printf("\t\t|>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-  	  	printf("\t\t|==================================================|\n\n");
-		ViewPlant();
-		break;
-		
-		case 2:
-		system("cls");
-		printf("\n\t\t|======================================================|\n");
-    	printf("\t\t|>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<|\n");
-  	  	printf("\t\t|======================================================|\n\n");
-		ViewEquipment();
-		break;
+	while(truth != 1) {
+		switch(option) {
+			case 0:
+			truth = 1;
+			break;
 			
-		case 3:
-		system("cls");
-		printf("\n\t\t|=================================================|\n");
-    	printf("\t\t|>>>>>>>>>>>>>>>>>> SALE INFO <<<<<<<<<<<<<<<<<<<<|\n");
-  	  	printf("\t\t|=================================================|\n\n");
-		ViewSale();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
+			case 1:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>>> PLANT INFO <<<<<<<<<<<<<<<<<<<<<<<<<<|", false);
+			ViewItem("data\\plantdata.bin");
+			break;
+			
+			case 2:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>> EQUIPMENT INFO <<<<<<<<<<<<<<<<<<<<<<<<|", false);
+			ViewItem("data\\equipdata.bin");
+			break;
+				
+			case 3:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>>> SALE INFO <<<<<<<<<<<<<<<<<<<<<<<<<<<|", false);
+			ViewSale();
+			break;
+
+			case 4:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>> LIMITED ITEM INFO <<<<<<<<<<<<<<<<<<<<<<<|", false);
+			ViewItem("data\\limitemdata.bin");
+			break;
+
+			case 5:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>>> QUEUE INFO <<<<<<<<<<<<<<<<<<<<<<<<<<|", false);
+			ViewQueue();
+			break;
+			
+			default:
+			option = InvalidOption(option);
+			break;
+		}//end switch
+	}//end while
 	printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
 }//end of funtion 
 
-void Add()//sub menu allows user to select what type of record to add
-{
-	int option;
+void Add() {//sub menu allows user to select what type of record to add
+	int option, truth = 0;
 
 	printf("\n\tWhat type of record would you like to add?\n\n");
 	printf("\t0. Exit to main menu.\n\n");
 	printf("\t1. Add plant record.\n\n");
 	printf("\t2. Add equipment record.\n\n");
 	printf("\t3. Add sale record.\n\n");
+	printf("\t4. Add limited item.\n\n");
 	printf("\t\tYou chose: ");
-	scanf("%d", &option);
+	option = checknum(1);
 	printf("\n\t--------------------------------------------------------------------");
 	
-	switch(option)
-	{
-		case 0:
-		break;
-		
-		case 1:
-		system("cls");
-		printf("\n\t|========================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> ADD PLANT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|========================================================|\n\n");
-  		AddPlant();
-		break;
-		
-		case 2:
-		system("cls");
-		printf("\n\t|============================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> ADD EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|============================================================|\n\n");
-  		AddEquip();
-		break;
-		
-		case 3:
-		system("cls");
-		printf("\n\t|=======================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> ADD SALE RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|=======================================================|\n\n");
-  		AddSale();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
+	while(truth != 1) {
+		switch(option) {
+			case 0:	
+			truth = 1;
+			break;
+			
+			case 1:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>> ADD PLANT RECORD <<<<<<<<<<<<<<<<<<<<<<|", false);
+	  		AddItem("data\\plantid.txt", "data\\plantdata.bin", "ab+");
+			break;
+			
+			case 2:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>> ADD EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<<<|", false);
+	  		AddItem("data\\equipid.txt", "data\\equipdata.bin", "ab+");
+			break;
+			
+			case 3:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>> ADD SALE RECORD <<<<<<<<<<<<<<<<<<<<<<<<|", false);
+	  		AddSale();
+			break;
+
+			case 4:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>> ADD LIMITED ITEM <<<<<<<<<<<<<<<<<<<<<<<<|", false);
+	  		AddItem("data\\limitem.txt", "data\\limitemdata.bin", "rb+");
+			break;
+			
+			default:
+			option = InvalidOption(option);
+			break;
+		}//end switch
+	}//end while
 	printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
 }//end of funtion 
 
-void Search()//sub menu allows user to select what type of record to search for
-{
-	int option;
+void Search() {//sub menu allows user to select what type of record to search for
+	int option, truth = 0;
 	
 	printf("\n\tWhat type of record would you like to search?\n\n");
 	printf("\t0. Exit to main menu.\n\n");
@@ -2770,48 +1036,43 @@ void Search()//sub menu allows user to select what type of record to search for
 	printf("\t2. Search equipment record.\n\n");
 	printf("\t3. Search sale record.\n\n");
 	printf("\t\tYou chose: ");
-	scanf("%d", &option);
+	option = checknum(1);
 	printf("\n\t--------------------------------------------------------------------");
 	
-	switch(option)
-	{
-		case 0:
-		break;
-		
-		case 1:
-		system("cls");
-		printf("\n\t|===========================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> SEARCH PLANT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|===========================================================|\n\n");
-		SearchPlant();
-		break;
-		
-		case 2:
-		system("cls");
-		printf("\n\t|===============================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> SEARCH EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|===============================================================|\n\n");
-		SearchEquipment();
-		break;
-		
-		case 3:
-		system("cls");
-		printf("\n\t|==========================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> SEARCH SALE RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|==========================================================|\n\n");
-		SearchSale();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
+	while(truth != 1) {
+		switch(option) {
+			case 0:
+			truth = 1;
+			break;
+			
+			case 1:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>> SEARCH PLANT RECORD <<<<<<<<<<<<<<<<<<<<<<|", false);
+			SearchItem("data\\plantdata.bin", 0);
+			break;
+			
+			case 2:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>> SEARCH EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<|", false);
+			SearchItem("data\\equipdata.bin", 0);
+			break;
+			
+			case 3:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>> SEARCH SALE RECORD <<<<<<<<<<<<<<<<<<<<<<|", false);
+			SearchSale(0);
+			break;
+			
+			default:
+			option = InvalidOption(option);
+			break;
+		}//end switch
+	}//end while
 	printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
 }//end of funtion 
 
-void Update()//sub menu allows user to select what type of record to update
-{
-	int option;
+void Update() {//sub menu allows user to select what type of record to update
+	int option, truth = 0;
 	
 	printf("\n\tWhat type of record would you like to update?\n\n");
 	printf("\t0. Exit to main menu.\n\n");
@@ -2819,48 +1080,43 @@ void Update()//sub menu allows user to select what type of record to update
 	printf("\t2. Update equipment record.\n\n");
 	printf("\t3. Update sale record.\n\n");
 	printf("\t\tYou chose: ");
-	scanf("%d", &option);
+	option = checknum(1);
 	printf("\n\t--------------------------------------------------------------------");
 	
-	switch(option)
-	{
-		case 0:
-		break;
-		
-		case 1:	
-		system("cls");
-		printf("\n\t|===========================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> UPDATE PLANT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|===========================================================|\n\n");
-  		UpdatePlant();
-		break;
-		
-		case 2:
-		system("cls");
-		printf("\n\t|===============================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> UPDATE EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|===============================================================|\n\n");
-		UpdateEquipment();
-		break;
-		
-		case 3:
-		system("cls");
-		printf("\n\t|==========================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> SEARCH SALE RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|==========================================================|\n\n");
-		UpdateSale();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
-	}
+	while(truth != 1) {
+		switch(option) {
+			case 0:
+			truth = 1;
+			break;
+			
+			case 1:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>> UPDATE PLANT RECORD <<<<<<<<<<<<<<<<<<<<<<|", false);
+	  		SearchItem("data\\plantdata.bin", 2);
+			break;
+			
+			case 2:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>> UPDATE EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<|", false);
+			SearchItem("data\\equipdata.bin", 2);
+			break;
+			
+			case 3:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>> UPDATE SALE RECORD <<<<<<<<<<<<<<<<<<<<<<<|", false);
+			SearchSale(2);
+			break;
+			
+			default:
+			option = InvalidOption(option);
+			break;
+		}//end switch
+	}//end while
 	printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
 }//end of funtion 
 
-void Delete()//sub menu allows user to select what type of record to delete
-{
-	int option;
+void Delete() {//sub menu allows user to select what type of record to delete
+	int option, truth = 0;
 	
 	printf("\n\tWhat type of record would you like to delete?\n\n");
 	printf("\t0. Exit to main menu.\n\n");
@@ -2868,205 +1124,182 @@ void Delete()//sub menu allows user to select what type of record to delete
 	printf("\t2. Delete equipment record.\n\n");
 	printf("\t3. Delete sale record.\n\n");
 	printf("\t\tYou chose: ");
-	scanf("%d", &option);
+	option = checknum(1);
 	printf("\n\t--------------------------------------------------------------------");
 	
-	switch(option)
-	{
-		case 0:
-		break;
-		
-		case 1:
-		system("cls");
-		printf("\n\t|===========================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> DELETE PLANT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|===========================================================|\n\n");
-		DeletePlant();
-		break;
-		
-		case 2:
-		system("cls");
-		printf("\n\t|===============================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> DELETE EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|===============================================================|\n\n");
-		DeleteEquipment();
-		break;
-		
-		case 3:
-		system("cls");
-		printf("\n\t|==========================================================|\n");
- 		printf("\t|>>>>>>>>>>>>>>>>>> DELETE SALE RECORD <<<<<<<<<<<<<<<<<<<<|\n");
-  		printf("\t|==========================================================|\n\n");
-		DeleteSale();
-		break;
-		
-		default:
-		printf("\n\t\tInvalid option.");
-		break;
+	while(truth != 1) {
+		switch(option) {
+			case 0:
+			truth = 1;
+			break;
+			
+			case 1:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>> DELETE PLANT RECORD <<<<<<<<<<<<<<<<<<<<<<|", false);
+			SearchItem("data\\plantdata.bin", 1);
+			break;
+			
+			case 2:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>> DELETE EQUIPMENT RECORD <<<<<<<<<<<<<<<<<<<<|", false);
+			SearchItem("data\\equipdata.bin", 1);
+			break;
+			
+			case 3:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>> DELETE SALE RECORD <<<<<<<<<<<<<<<<<<<<<<|", false);
+			SearchSale(1);
+			break;
+			
+			default:
+			option = InvalidOption(option);
+			break;
+		}
 	}
 	printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
 }//end of funtion 
 
-void menu()//give user a list of choices
-{
-	system("cls");
-	int choice;
-    do
-    {
-    	printf("\n\n\n\t|===========================================================|\n");
-        printf("\t|>>>>>>>>>>>>>>>>>> PLANT SHOP DATABASE <<<<<<<<<<<<<<<<<<<<|\n");
-        printf("\t|===========================================================|\n\n");
-        printf("\n\t0.\tExit.\n");
-        printf("\n\t1.\tCreate database.\n");
-        printf("\n\t2.\tView records.\n");
-		printf("\n\t3.\tAdd records.\n");
-        printf("\n\t4.\tSearch records.\n");
-		printf("\n\t5.\tUpdate records.\n");
-        printf("\n\t6.\tDelete records.\n");
-        printf("\n\t\tWhat would you like to do?\n");
-        printf("\n\t\tYou chose: ");
-        
-       	while (scanf("%d",&choice)!=1)
-       	{	
-       		printf("\n\t\tInput must be an integer\n");
-			printf("\n\t\tWhat would you like to do?\n");
-       		printf("\n\t\tYou chose: ");
-       		scanf("%d",&choice);
-       		while ((getchar()) != '\n');
-		}
+void Queue() {
+	int option, truth = 0;
+	
+	printf("\n\tWhat type of record would you like to delete?\n\n");
+	printf("\t0. Exit to main menu.\n\n");
+	printf("\t1. Add to Queue.\n\n");
+	printf("\t2. Remove from Queue.\n\n");	
+	printf("\t\tYou chose: ");
+	option = checknum(1);
+	printf("\n\t--------------------------------------------------------------------");
+	
+	while(truth != 1) {
+		switch(option) {
+			case 0:
+			truth = 1;
+			break;
+			
+			case 1:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>> ADD TO QUEUE <<<<<<<<<<<<<<<<<<<<<<<<<|", false);
+			Enqueue();
+			break;
+
+			case 2:
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>> REMOVE FROM QUEUE <<<<<<<<<<<<<<<<<<<<<<<|", false);
+			Dequeue();
+			break;
 		
-        switch(choice)
-        {
+			default:
+			option = InvalidOption(option);
+			break;
+		}
+	}
+	printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
+}
+
+void menu() {//give user a list of choices
+	int choice, truth = 0;
+	mkdir("data");
+	PrintLabel("|>>>>>>>>>>>>>>>>>>>> PLANT SHOP DATABASE <<<<<<<<<<<<<<<<<<<<<<|", false);
+    printf("\n\t0.\tExit.\n");
+    printf("\n\t1.\tCreate database.\n");
+    printf("\n\t2.\tView records.\n");
+	printf("\n\t3.\tAdd records.\n");
+    printf("\n\t4.\tSearch records.\n");
+	printf("\n\t5.\tUpdate records.\n");
+    printf("\n\t6.\tDelete records.\n");
+	printf("\n\t7.\tEdit Queue.\n");
+    printf("\n\t\tYou chose: ");
+	choice = checknum(1);
+	
+	while(truth != 1) {
+        switch(choice) {
         	case 0:
+        	truth = 1;
         	printf("\n\t\tExiting...");
         	exit(1);
         	break;
         	
         	case 1:
-        	system("cls");
-        	printf("\n\t|===========================================================|\n");
-        	printf("\t|>>>>>>>>>>>>>>>>>>>>>>> CREATE FILE <<<<<<<<<<<<<<<<<<<<<<<|\n");
-        	printf("\t|===========================================================|\n\n");
+        	truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>>> CREATE FILE <<<<<<<<<<<<<<<<<<<<<<<<<|", false);
         	CreateFile();
-        	while ((getchar()) != '\n');
-			while ((getchar()) != '\n');
-        	system("cls");
+            MenuPause();
         	break;
 
             case 2:
-            system("cls");
-            printf("\n\t|===========================================================|\n");
-        	printf("\t|>>>>>>>>>>>>>>>>>>>>>> VIEW RECORDS <<<<<<<<<<<<<<<<<<<<<<<|\n");
-        	printf("\t|===========================================================|\n\n");
+            truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>> VIEW RECORDS <<<<<<<<<<<<<<<<<<<<<<<<<|", false);
             View();
-            while ((getchar()) != '\n');
-			while ((getchar()) != '\n');
-            system("cls");
+            MenuPause();
             break;
             
             case 3:
-            system("cls");	
-			printf("\n\t|===========================================================|\n");
-		    printf("\t|>>>>>>>>>>>>>>>>>>>>>> ADD RECORDS <<<<<<<<<<<<<<<<<<<<<<<<|\n");
-		    printf("\t|===========================================================|\n\n");
+            truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>> ADD RECORDS <<<<<<<<<<<<<<<<<<<<<<<<<<|", false);
 		    Add();
-		    while ((getchar()) != '\n');
-			while ((getchar()) != '\n');
-            system("cls");
+            MenuPause();
             break;
 			
 			case 4:
-            system("cls");	
-            printf("\n\t|===========================================================|\n");
-        	printf("\t|>>>>>>>>>>>>>>>>>>>>> SEARCH RECORDS <<<<<<<<<<<<<<<<<<<<<<|\n");
-        	printf("\t|===========================================================|\n\n");
+			truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>> SEARCH RECORDS <<<<<<<<<<<<<<<<<<<<<<<<|", false);
             Search();
-            while ((getchar()) != '\n');
-			while ((getchar()) != '\n');
-            system("cls");
+            MenuPause();
             break;
             	
             case 5:
-            system("cls");	
-            printf("\n\t|===========================================================|\n");
-        	printf("\t|>>>>>>>>>>>>>>>>>>>>> UPDATE RECORDS <<<<<<<<<<<<<<<<<<<<<<|\n");
-        	printf("\t|===========================================================|\n\n");
+            truth = 1;
+			PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>> UPDATE RECORDS <<<<<<<<<<<<<<<<<<<<<<<<|", false);
             Update();
-            while ((getchar()) != '\n');
-			while ((getchar()) != '\n');
-            system("cls");
+            MenuPause();
             break;
 
             case 6:
-            system("cls");	
-            printf("\n\t|===========================================================|\n");
-        	printf("\t|>>>>>>>>>>>>>>>>>>>>> DELETE RECORDS <<<<<<<<<<<<<<<<<<<<<<|\n");
-        	printf("\t|===========================================================|\n\n");
+            truth = 1;
+            PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>> DELETE RECORDS <<<<<<<<<<<<<<<<<<<<<<<<|", false);
             Delete();
-            while ((getchar()) != '\n');
-			while ((getchar()) != '\n');
-            system("cls");
+            MenuPause();
+            break;
+
+            case 7:
+            truth = 1;
+            PrintLabel("|>>>>>>>>>>>>>>>>>>>>>>>>> EDIT QUEUE <<<<<<<<<<<<<<<<<<<<<<<<<<|", false);
+            Queue();
+			MenuPause();
             break;
        
-            default :
-            printf("\n\t\tInvalid option\n");
-            printf("\n\n\t\tPress enter to return to the main menu.\n\t\t");
-			while ((getchar()) != '\n');
-			while ((getchar()) != '\n');
-            menu();
-            break;
-        }
-    }
-    while(choice != 0);
+			default:
+			choice = InvalidOption(choice);
+			break;
+        }//end switch
+    }//end while
 }//end of function
 
-void Password()//function to prompt user to enter the password. Exits the program if the password is entered wrongly three times
-{
+void Password() {//function to prompt user to enter the password. Exits the program if the password is entered wrongly three times
 	char guess[SIZE];
-	int i, ret;
+	int i;
 	
-	for (i = 3; i > 0; i--)
-	{
+	for (i = 3; i > 0; i--) {
 		printf("\n\tEnter the password to access the database.\n\tPassword: ");
 		gets(guess);
 		
-		ret = strcmp(guess, PASSWORD);
-		
-		if (ret == 0)
-		{
+		if ((strcmp(guess, PASSWORD)) == 0)
 			menu();
-		}//end if
-		
-		else
-		{
+		else {
 			if (i > 2)
-			{
 				printf("\tWrong. You have %d tries left.\n", i-1);	
-			}//end if
-			
 			if (i == 2)
-			{
 				printf("\tWrong. You have %d try left.\n", i-1);
-			}//end if
-			
-			if (i == 1)
-			{
+			if (i == 1) {
 				printf("\tWrong. You have entered the incorrect password too many times.\n\tExiting...");
 				exit(1);
 			}//end if
-			
-		}//end else
-		
+		}//
 	}//end for
 }//end of function
 
-main()
-{
-	printf("\n\n\n\t|===========================================================|\n");
-    printf("\t|>>>>>>>>>>>>>>>>>> PLANT SHOP DATABASE <<<<<<<<<<<<<<<<<<<<|\n");
-    printf("\t|===========================================================|\n\n");
-        
-    Password();
-    
+int main() {
+	PrintLabel("|>>>>>>>>>>>>>>>>>>>> PLANT SHOP DATABASE <<<<<<<<<<<<<<<<<<<<<<|", true);
+	Password();
     return 0;
 }
